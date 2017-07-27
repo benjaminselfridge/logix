@@ -1,0 +1,32 @@
+name:                logix
+version:             0.1.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/githubuser/logix#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2017 Author name here
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable logix
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  other-modules:       Calculus, Parse
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7,
+                       lens,
+                       split
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Calculus, Parse
+  other-modules:
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7,
+                       lens,
+                       split
