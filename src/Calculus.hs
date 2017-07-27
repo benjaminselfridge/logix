@@ -21,6 +21,7 @@ module Calculus
   , FormulaPat(..)
   , Sequent(..)
   , SequentPat(..)
+  , RulePat(..)
   , Assignment
   , Calculus(..)
   , showFormulaInst
@@ -39,7 +40,6 @@ module Calculus
   , conclusion
   , stubs
   , getGoal
-  , showGoalSpec
   , applicableAxioms
   , applicableRules
   , applyAxiom
@@ -50,6 +50,7 @@ module Calculus
   
   -- * Pretty printing
   , ppRulePat
+  , ppGoalSpec
   , ppDerivation
   , ppDerivationTree
   ) where
@@ -316,8 +317,13 @@ applicableRules calculus (ants :=> sucs) = do
   assignment <- matchAll [(antPats, ants), (sucPats, sucs)]
   return (name, assignment)
 
+-- | A pointer into a derivation, representing a subgoal. Empty list represents the
+-- root of the derivation; [1,2] means look at the first subderivation, then the
+-- second subderivation of that, etc.
 type GoalSpec = [Int]
 
+-- | Get all the 'Stub's in a derivation. Returns a list of pairs, where we get both
+-- the 'GoalSpec' (i.e. the path to the 'Stub') and the sequent of the 'Stub'.
 stubs :: Derivation -> [(GoalSpec, Sequent)]
 stubs (Stub sequent) = [([], sequent)]
 stubs (Axiom _ _)    = []
@@ -334,6 +340,8 @@ infixl 9 !!!
              | otherwise = xs !!! (n-1)
 _ !!! _ = Nothing
 
+-- | Given a 'GoalSpec' and a 'Derivation', traverse the derivation tree and find the sub-derivation
+-- pointed to by that 'GoalSpec'.
 getGoal :: GoalSpec -> Derivation -> Maybe Derivation
 getGoal [] der = Just der
 getGoal (x:xs) (Der _ _ ders) = do
@@ -341,6 +349,7 @@ getGoal (x:xs) (Der _ _ ders) = do
   getGoal xs der
 getGoal _ _ = Nothing
 
+-- | Get the conclusion of a derivation (the sequent that appears underneath the line).
 conclusion :: Derivation -> Sequent
 conclusion (Stub  sequent)     = sequent
 conclusion (Axiom sequent _)   = sequent
@@ -351,6 +360,10 @@ setElt _ _ [] = []
 setElt 0 x (y:ys) = x : ys
 setElt n x (y:ys) | n > 0 = y : (setElt (n-1) x ys)
 
+-- | Given a 'Calculus', a axiom name, a 'GoalSpec' (pointer to a particular node in
+-- the derivation tree), and a 'Derivation', return a new derivation consisting of
+-- the old one with the given node replaced with an axiom application. Fails if the
+-- node doesn't exist.
 applyAxiom :: Calculus -> String -> GoalSpec -> Derivation -> Maybe Derivation
 applyAxiom calculus name [] (Stub sequent) = Just $ Axiom sequent name
 applyAxiom calculus name (x:xs) (Der sequent rule ders) = do
@@ -366,6 +379,10 @@ tryAxiom calculus name assignment = case pat of
   Just sequent -> trySequent assignment sequent
   where pat = lookup name (axioms calculus)
 
+-- | Given a 'Calculus', a rule name, an assignment for the rule, a 'GoalSpec'
+-- (pointer to a particular node in the derivation tree), and a 'Derivation', return
+-- a new derivation consisting of the old one with the given node replaced with a
+-- rule application. Fails if the node doesn't exist.
 applyRule :: Calculus -> String -> Assignment -> GoalSpec -> Derivation -> Maybe Derivation
 applyRule calculus name assignment [] der = do
   (premises, antPats ::=> sucPats) <- lookup name (rules calculus)
@@ -385,6 +402,7 @@ tryRule calculus name assignment = case pat of
     nub $ trySequent assignment conc ++ concat (map (trySequent assignment) prems)
   where pat = lookup name (rules calculus)
 
+-- | Given a "Calculus" and a "Derivation", check that the derivation is valid.
 checkDerivation :: Calculus -> Derivation -> Either Derivation ()
 checkDerivation calculus (Stub _) = return ()
 checkDerivation calculus d@(Axiom conc axiom)
@@ -425,20 +443,21 @@ showFormula' (Implies a Bottom)
                            = "~" ++ showFormula' a
 showFormula' (Implies a b) = "(" ++ showFormula' a ++ " -> "  ++ showFormula' b ++ ")"
 
+showFormula (And (Implies a b) (Implies b' a'))
+  | a == a', b == b'     = showFormula' a ++ " <-> " ++ showFormula' b
+showFormula (And a b)          = showFormula' a ++ " & " ++ showFormula' b
+showFormula (Or a b)           = showFormula' a ++ " | " ++ showFormula' b
+showFormula (Implies a Bottom) = "~" ++ showFormula' a
+showFormula (Implies a b)      = showFormula' a ++ " -> " ++ showFormula' b
+showFormula formula            = showFormula' formula
+
 instance Show Formula where
-  show (And (Implies a b) (Implies b' a'))
-    | a == a', b == b'     = showFormula' a ++ " <-> " ++ showFormula' b
-  show (And a b)          = showFormula' a ++ " & " ++ showFormula' b
-  show (Or a b)           = showFormula' a ++ " | " ++ showFormula' b
-  show (Implies a Bottom) = "~" ++ showFormula' a
-  show (Implies a b)      = showFormula' a ++ " -> " ++ showFormula' b
-  show formula            = showFormula' formula
+  show = showFormula
 
 instance Show Sequent where
   show (ants :=> sucs) = intercalate ", " (map show ants) ++ " => " ++
                          intercalate ", " (map show sucs)
 
--- TODO: parenthesize patterns, just like Formula
 showFormulaPat' (AtomPat p) = p
 showFormulaPat' (VarPat a) = a
 showFormulaPat' (SetPat gamma) = gamma
@@ -464,11 +483,12 @@ instance Show FormulaPat where
 showFormulaInst' :: Assignment -> FormulaPat -> String
 showFormulaInst' bindings (AtomPat p) = case lookup p bindings of
   Nothing  -> "[[" ++ p ++ "]]" -- p is unbound
-  Just [f] -> show f
+  Just [f] -> showFormula' f
   Just fs  -> error $ "atom variable " ++ p ++ " bound to " ++ show fs
 showFormulaInst' bindings (VarPat a) = case lookup a bindings of
   Nothing  -> "[[" ++ a ++ "]]"
-  Just [f] -> show f
+  Just [f] -> showFormula' f
+  -- use showFormula' instead of show to ensure it gets parenthesized
   Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ show fs
 showFormulaInst' bindings (SetPat g) = case lookup g bindings of
   Nothing -> "[[" ++ g ++ "]]"
@@ -485,7 +505,13 @@ showFormulaInst' bindings (ImpliesPat s t) =
   "(" ++ showFormulaInst' bindings s ++ " -> " ++ showFormulaInst' bindings t ++ ")"
 showFormulaInst' bindings BottomPat = "_|_"
 
+-- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
+-- instantiation. 
 showFormulaInst :: Assignment -> FormulaPat -> String
+showFormulaInst bindings (VarPat a) = case lookup a bindings of
+  Nothing -> "[[" ++ a ++ "]]"
+  Just [f] -> show f
+  Just fs -> error $ "var variable " ++ a ++ " bound to " ++ show fs
 showFormulaInst bindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
   | s == s' && t == t' =
     showFormulaInst' bindings s ++ " <-> " ++ showFormulaInst' bindings t
@@ -504,12 +530,15 @@ showSequentPat' (ants ::=> sucs) = intercalate ", " (map show ants) ++ " => " ++
 instance Show SequentPat where
   show = showSequentPat'
 
+-- | Given a (possibly incomplete) assignment and a sequent pattern, pretty print the
+-- instantiation.
 showSequentInst :: Assignment -> SequentPat -> String
 showSequentInst bindings (ants ::=> sucs) =
   intercalate ", " (filter (not . null) (map (showFormulaInst bindings) ants)) ++
    " => " ++
   intercalate ", " (filter (not . null) (map (showFormulaInst bindings) sucs))
 
+-- | Pretty print a rule pattern.
 ppRulePat :: String -> (String, RulePat) -> String
 ppRulePat pad (name, (premises, conclusion)) =
   let pStr = intercalate "   " (map show premises)
@@ -591,40 +620,30 @@ ppCalculus (Calculus name axioms rules) =
           [gamma] -> gamma ++ " is an arbitrary list of formulas"
           allSets -> intercalate ", " allSets ++ " are arbitrary lists of formulas"
 
-        -- TODO: fix this.
-
-        qualString' [] = ""
-        qualString' ("":qs) = qualString' qs
-        qualString' (q:[]) = "      " ++ q
-        qualString' (q:qs) = "      " ++ q ++ ",\n" ++ qualString' qs
-
-        qualString'' [] = ""
-        qualString'' (q:[]) = q
-        qualString'' ("":qs) = qualString'' qs
-        qualString'' (q:qs) = q ++ ",\n" ++ qualString' qs
-
-        qualString = case qualString'' [atomString, formulaString, contextString] of
-          "" -> ""
-          qStr -> "where " ++ qStr
-
+        qualString = let qualStrings = filter (not . null) [atomString,
+                                                            formulaString,
+                                                            contextString]
+                     in case qualStrings of
+                          [] -> ""
+                          _  -> "where " ++ intercalate ",\n      " qualStrings
+                          
 instance Show Calculus where
   show = ppCalculus
 
-showGoalSpec :: GoalSpec -> String
-showGoalSpec [] = "top"
-showGoalSpec gs = intercalate "." (map show gs)
+-- | Pretty print a 'GoalSpec'.
+ppGoalSpec :: GoalSpec -> String
+ppGoalSpec [] = "top"
+ppGoalSpec gs = intercalate "." (map show gs)
 
--- TODO: make a pretty printer where each stub actually gets annotated with the
--- subgoal it corresponds to
-
+-- | \"Pretty\" print a derivation.
 ppDerivation :: Derivation -> String
 ppDerivation = ppDerivation' "" [] where
   ppDerivation' pad spec (Stub conclusion) =
-    pad ++ show conclusion ++ " (unproved) [" ++ showGoalSpec spec ++ "]\n"
+    pad ++ show conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' pad spec (Axiom conclusion axiom) =
-    pad ++ show conclusion ++ " (by " ++ axiom ++ ") [" ++ showGoalSpec spec ++ "]\n"
+    pad ++ show conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' pad spec (Der conclusion rule premises) =
-    pad ++ show conclusion ++ " (by " ++ rule ++ ") [" ++ showGoalSpec spec ++ "]\n" ++
+    pad ++ show conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
     (concat $ ppPremises spec 1 premises)
     where ppPremises spec n [] = []
           ppPremises spec n (prem:prems) =
@@ -652,24 +671,25 @@ spliceStrings x y = unlines xyLines
         extend n (x:xs) = x   : extend (n-1) xs
         sep = "   "
 
+-- TODO: put this in some utility file
 padL :: Int -> String -> String
 padL n = (unlines . map (replicate n ' '++) . lines)
 
 -- Pretty printing a derivation
 -- TODO: put an asterisk at the current subgoal
 -- TODO: maybe move some of these printing functions to a separate file (Main?)
-ppDerivationTree' :: Derivation -> GoalSpec -> String
-ppDerivationTree' (Stub conclusion) spec =
-  show conclusion ++ "\n"
-ppDerivationTree' (Axiom conclusion axiom) spec =
-  "[" ++ show conclusion ++ "]\n"
-ppDerivationTree' (Der conclusion rule ders) spec =
+ppDerivationTree' :: GoalSpec -> Derivation -> GoalSpec -> String
+ppDerivationTree' subgoal (Stub conclusion) spec =
+  show conclusion ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' subgoal (Axiom conclusion axiom) spec =
+  "[" ++ show conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' subgoal (Der conclusion rule ders) spec =
   let newSpecs = zipWith (++) (repeat spec) (map (:[]) [1..length ders])
-      ppDers = zipWith ppDerivationTree' ders newSpecs
+      ppDers = zipWith (ppDerivationTree' subgoal) ders newSpecs
       premString = foldl spliceStrings "" ppDers
       premStringWidth = case premString of (_:_) -> maximum (map length (lines premString))
                                            _     -> 0
-      concString = show conclusion
+      concString = show conclusion ++ if spec == subgoal then "*" else ""
       concStringWidth = length concString
       width = max premStringWidth concStringWidth
       premPad = (width - premStringWidth) `div` 2
@@ -678,10 +698,18 @@ ppDerivationTree' (Der conclusion rule ders) spec =
       concString' = padL concPad concString
   in premString' ++ padL concPad (replicate concStringWidth '-') ++ concString'
 
-ppDerivationTree der = ppDerivationTree' der []
+-- | Pretty print a derivation as a tree in the typical style.
+ppDerivationTree der subgoal = ppDerivationTree' subgoal der []
 
 --------------------------------------------------------------------------------
 -- examples
+
+atom = AtomPat "P"
+a = VarPat "A"
+b = VarPat "B"
+c = VarPat "C"
+gamma = SetPat "Gamma"
+delta = SetPat "Delta"
 
 p = Atom "P"
 q = Atom "Q"

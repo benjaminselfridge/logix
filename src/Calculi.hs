@@ -1,10 +1,27 @@
-module Calculi where
+{-|
+Module      : Sequent
+Description : Package for defining sequent calculi, and for proof checking and
+              generation. 
+Copyright   : (c) Ben Selfridge, 2017
+License     : GPL-3
+Maintainer  : benselfridge@gmail.com
+Stability   : experimental
+
+This module is where we define the actual Calculi for logix. It can be edited to
+customize the software.
+
+-}
+
+module Calculi
+  ( calculi
+  ) where
 
 import Calculus
 
 -- To add your own calculus to logix, define it under the "Calculi definitions"
 -- section, and add it to the following list:
 
+-- | All the calculi for logix.
 calculi :: [Calculus]
 calculi = [g3ip, g3cp, g0ip, g0ip_em, g3ipm, hilbert]
 

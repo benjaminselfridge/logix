@@ -39,36 +39,21 @@ instance MonadPlus Parser where
 --------------------------------------------------------------------------------
 -- combinators
 
--- TODO: remove shows
-
 many :: Parser a -> Parser [a]
--- many p = Parser ps where
---   ps cs = case parse p cs of
---             [] -> [([], cs)]
---             [(a,cs')] -> map (\(as, leftover) -> (a:as, leftover)) $ parse (many p) cs'
 many p = many1 p <|> return []
 
 many1 :: Parser a -> Parser [a]
--- many1 p = do
---   a  <- p
---   as <- many p
---   return (a:as)
 many1 p = do { a <- p; as <- many p; return (a:as) }
 
-between l r p = l *> p <* r
-
 sepBy :: Parser sep -> Parser a -> Parser [a]
--- sepBy sep p = Parser ps where
---   ps cs = case parse p cs of
---             [] -> [([], cs)]
---             [(a,cs')] -> map (\(as, leftover) ->
---                                 (a:as, leftover)) $ parse (many (sep >> p)) cs'
 sepBy sep p = sepBy1 sep p <|> return []
 
 sepBy1 :: Parser sep -> Parser a -> Parser [a]
 sepBy1 sep p = do a <- p
                   as <- many (do { sep; p })
                   return (a:as)
+
+between l r p = l *> p <* r
 
 --------------------------------------------------------------------------------
 -- Concretes
@@ -121,11 +106,7 @@ end = Parser (\cs -> case cs of
 
 -- TODO: add <->
 
-topFormula :: Parser Formula
-topFormula = spaces *> formula <* spaces <* end
-
 formula :: Parser Formula
--- formula = (implFormula <|> subFormula)
 formula = (iffFormula <|> implSubFormula)
 
 iffFormula :: Parser Formula
@@ -199,9 +180,3 @@ sequent = do ants <- formulaList
              spaces
              sucs <- formulaList
              return $ ants :=> sucs
-
---------------------------------------------------------------------------------
--- Top-level parser
-
-parseSequent :: String -> [(Sequent, String)]
-parseSequent = parse $ spaces *> sequent <* spaces

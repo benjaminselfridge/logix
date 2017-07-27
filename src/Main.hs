@@ -117,7 +117,7 @@ listGoals env _ = do
           putStrLn $ "top: " ++ show sequent
         printGoal (spec, sequent) = do
           putStr $ if spec == (subgoal env) then " *" else "  "
-          putStr $ showGoalSpec spec
+          putStr $ ppGoalSpec spec
           putStrLn $ ": " ++ show sequent
 
 changeSubgoal :: Env -> String -> IO Env
@@ -125,14 +125,14 @@ changeSubgoal env arg =
   if null subgoalString
   then do let der = getCurrentGoal env
           putStr $ "Current subgoal: " ++ show (conclusion der)
-          putStrLn $ " [" ++ showGoalSpec (subgoal env) ++ "]"
+          putStrLn $ " [" ++ ppGoalSpec (subgoal env) ++ "]"
           return env
   else case getGoal subgoalSpec (goal env) of
          Nothing  -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
                         return env
          Just der -> do
            putStr $ "Current subgoal: " ++ show (conclusion der)
-           putStrLn $ " [" ++ showGoalSpec subgoalSpec ++ "]"
+           putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
            return $ env { subgoal = subgoalSpec }
   where subgoalString = dropWhile (== ' ') arg
         subgoalSpec = if subgoalString == "top"
@@ -213,7 +213,7 @@ rule env arg =
               putStrLn $ "Applying " ++ name ++ "."
               let Just newGoal = applyRule (calculus env) name (extraBindings ++ assignment) (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
-              putStrLn $ "Setting active subgoal to " ++ showGoalSpec nextSubgoal ++
+              putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
                 ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
               return env { goal = newGoal, subgoal = nextSubgoal }
   where ruleString = dropWhile (== ' ') arg
@@ -255,7 +255,7 @@ axiom env arg =
               putStrLn $ "Applying " ++ name ++ "."
               let Just newGoal = applyAxiom (calculus env) name (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
-              putStrLn $ "Setting active subgoal to " ++ showGoalSpec nextSubgoal ++
+              putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
                 ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
               return env { goal = newGoal, subgoal = nextSubgoal }
   where axiomString = dropWhile (== ' ') arg
@@ -272,7 +272,7 @@ axiom env arg =
 printProofTree :: Env -> String -> IO Env
 printProofTree env _ =
   case (pretty env) of
-    True -> do putStr $ ppDerivationTree (goal env)
+    True -> do putStr $ ppDerivationTree (goal env) (subgoal env)
                return env
     _    -> do putStr $ ppDerivation (goal env)
                return env
@@ -347,7 +347,7 @@ main = do
   putStr introMessage
   repl $ Env { goal = Stub ([] :=> [Implies (Atom "p") (Atom "p")])
              , subgoal = []
-             , calculus = g3cp
+             , calculus = head calculi
              , quitFlag = False
              , pretty = True
              }
