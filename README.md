@@ -1,4 +1,5 @@
 # logix (Logic Explorer)
+Copyright Ben Selfridge 2017
 
 An interactive proof assistant for sequent calculi.
 
