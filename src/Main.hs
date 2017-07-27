@@ -3,6 +3,7 @@
 module Main where
 
 import Calculus
+import Calculi
 import Parse
 
 import Data.Char
@@ -35,9 +36,6 @@ getCurrentGoal :: Env -> Derivation
 getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
-
-calculi :: [Calculus]
-calculi = [g3ip, g3cp, g0ip, g0ip_em, g3ipm, hilbert]
 
 -- TODO: add "clear" command to turn current subgoal into a stub.
 -- TODO: print help commands with a fixed width.
