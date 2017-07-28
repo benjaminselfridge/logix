@@ -37,6 +37,8 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: add a unicode option. requires separating all show instances into a separate
+-- library. 
 -- TODO: add "clear" command to turn current subgoal into a stub.
 -- TODO: print help commands with a fixed width.
 commands :: [(String, (String, [String], Env -> String -> IO Env))]
@@ -302,7 +304,7 @@ changeCalculus env arg =
 listRule :: Env -> String -> IO Env
 listRule env arg =
   case (lookup ruleStr $ axioms (calculus env), lookup ruleStr $ rules (calculus env)) of
-    (Just axiomPat,_) -> do putStrLn (show axiomPat ++ "(" ++ ruleStr ++ ")")
+    (Just axiomPat,_) -> do putStrLn (show axiomPat ++ " (" ++ ruleStr ++ ")")
                             return env
     (_,Just rulePat)  -> do putStrLn (ppRulePat "" (ruleStr, rulePat))
                             return env

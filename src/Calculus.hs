@@ -28,7 +28,6 @@ module Calculus
   , showSequentInst
   
   -- * Pattern operators
-  , ($&), ($|), ($>), negpat, botpat
 
   -- * Pattern matching
   , match
@@ -65,7 +64,7 @@ data Formula = Bottom
              | And Formula Formula
              | Or Formula Formula
              | Implies Formula Formula
-  deriving (Eq, Ord)
+  deriving (Eq)
 
 --------------------------------------------------------------------------------
 -- | Represents a sequent in a Gentzen-style derivation. Logically, a sequent of the
@@ -92,21 +91,6 @@ data FormulaPat = BottomPat
              | SetPat String
              -- ^ a /list/ of arbitrary formulas
   deriving (Eq)
-
--- | Infix AndPat.
-($&) = AndPat
-
--- | Infix OrPat.
-($|) = OrPat
-
--- | Infix ImpliesPat.
-($>) = ImpliesPat
-
--- | Negated pattern.
-negpat pat = pat $> botpat
-
--- | Bottom pattern.
-botpat = BottomPat
 
 --------------------------------------------------------------------------------
 -- | Pattern for a sequent.
@@ -299,7 +283,6 @@ data Calculus = Calculus { name :: String
 data Derivation = Stub  Sequent
                 | Axiom Sequent String
                 | Der   Sequent String [Derivation]
-  deriving (Show)
 
 -- | Return all applicable axioms for a sequent. Gives the name of the axiom, and
 -- the assignment that will match the formula to the conclusion of the axiom.
