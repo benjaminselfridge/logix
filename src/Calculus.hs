@@ -679,7 +679,9 @@ ppDerivationTree' subgoal (Der conclusion rule ders) spec =
       concPad = (width - concStringWidth) `div` 2
       premString' = padL premPad premString
       concString' = padL concPad concString
-  in premString' ++ padL concPad (replicate concStringWidth '-') ++ concString'
+  in premString' ++ replicate concPad ' ' ++ replicate concStringWidth '-' ++
+--     " (" ++ rule ++ ")\n" ++
+     "\n" ++ concString'
 
 -- | Pretty print a derivation as a tree in the typical style.
 ppDerivationTree der subgoal = ppDerivationTree' subgoal der []

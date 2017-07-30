@@ -41,6 +41,8 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
 -- library. 
 -- TODO: add "clear" command to turn current subgoal into a stub.
 -- TODO: print help commands with a fixed width.
+-- TODO: after switching subgoals, either directly or by applying a rule or axiom,
+-- print all applicable rules.
 commands :: [(String, (String, [String], Env -> String -> IO Env))]
 commands = [ ("help", ("Print all commands.",
                        [],
@@ -328,7 +330,7 @@ repl env = do
   putStr "> "
   hFlush stdout
   s <- getLine
-  let (com, arg) = break isSpace s
+  let (com, arg) = break isSpace (dropWhile (==' ') s)
   case lookup com commands of
     Nothing -> do putStrLn $ "Invalid command: " ++ com
                   repl env
