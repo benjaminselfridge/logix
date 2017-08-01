@@ -188,7 +188,14 @@ g0i = Calculus {
              [a $> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
               [botpat] ::=> [c]))
-  , ("
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
+            [ forall_x_a, gamma] ::=> [c]))
+  , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
+            [nofree_y gamma] ::=> [nofree_y forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [c] ],
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y c]))
+  , ("Rexists", ([ [gamma] ::=> [a_x_t] ],
+            [gamma] ::=> [exists_x_a]))
   , ("Wk", ([ [gamma] ::=> [c] ],
             [a, gamma] ::=> [c]))
   , ("Ctr", ([ [a, a, gamma] ::=> [c] ],
