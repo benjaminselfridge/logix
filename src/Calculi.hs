@@ -26,19 +26,23 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3ip, g3cp, g0ip, g0cp, g0ip_em, g3ipm, hilbert]
+calculi = [g3c, g3cp, g3i, g3ip, g0ip, g0cp, g0ip_em, g3ipm, hilbert]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
 
-p = AtomPat "P"
-a = VarPat "A"
-b = VarPat "B"
-c = VarPat "C"
+p = PredPat "P"
+a = FormPat "A"
+b = FormPat "B"
+c = FormPat "C"
 gamma  = SetPat "Γ"
 gamma' = SetPat "Γ'"
 delta  = SetPat "Δ"
 delta' = SetPat "Δ'"
+a_x_y = SubstPat "x" (VarPat "y") "A"
+a_x_t = SubstPat "x" (TermPat "t") "A"
+forall_x_a = ForallPat "x" a
+exists_x_a = ExistsPat "x" a
 
 -- | Infix AndPat.
 ($&) = AndPat
@@ -83,6 +87,37 @@ g3ip = Calculus {
               [botpat, gamma] ::=> [c]))
   ]}
 
+g3i :: Calculus
+g3i = Calculus {
+  name = "g3i",
+  axioms = [("Axiom", [p, gamma] ::=> [p])],
+  rules = 
+  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
+            [gamma] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
+            [a $| b, gamma] ::=> [c]))
+  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a $> b, gamma] ::=> [c]))
+  , ("L_|_", ([],
+              [botpat, gamma] ::=> [c]))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
+            [ forall_x_a, gamma] ::=> [c]))
+  , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
+            [NoFreePat "y" gamma] ::=> [NoFreePat "y" forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [c] ],
+            [NoFreePat "y" exists_x_a, NoFreePat "y" gamma] ::=> [NoFreePat "y" c]))
+  , ("Rexists", ([ [gamma] ::=> [a_x_t] ],
+            [gamma] ::=> [exists_x_a]))
+  ]}
+
 -- | G3cp, a contraction-free calculus for classical logic with shared contexts. This
 -- calculus is ideally suited for proof search, as any given sequent usually has at
 -- most one rule that applies to it.
@@ -105,6 +140,36 @@ g3cp = Calculus {
             [gamma] ::=> [delta, a $| b]))
   , ("R->", ([ [a, gamma] ::=> [delta, b] ],
              [gamma] ::=> [delta, a $> b]))
+  ]}
+
+g3c :: Calculus
+g3c = Calculus {
+  name = "g3c",
+  axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
+  rules =
+  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+            [a $& b, gamma] ::=> [delta]))
+  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
+            [a $| b, gamma] ::=> [delta]))
+  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
+             [a $> b, gamma] ::=> [delta]))
+  , ("L_|_", ([],
+              [botpat, gamma] ::=> [delta]))
+  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
+             [gamma] ::=> [delta, a $> b]))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
+            [forall_x_a, gamma] ::=> [delta]))
+  , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
+            [NoFreePat "y" gamma] ::=> [NoFreePat "y" delta, NoFreePat "y" forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [delta] ],
+            [NoFreePat "y" exists_x_a, NoFreePat "y" gamma] ::=> [NoFreePat "y" delta]))
+  , ("Rexists", ([ [gamma] ::=> [delta, exists_x_a, a_x_t] ],
+            [gamma] ::=> [delta, exists_x_a]))
+              
   ]}
 
 -- | G0ip, a calculus for intuitionistic logic with independent contexts. Not a great

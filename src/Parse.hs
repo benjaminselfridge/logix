@@ -100,9 +100,30 @@ end = Parser (\cs -> case cs of
                  _  -> [])
 
 --------------------------------------------------------------------------------
--- Formulas
+-- Terms
 
--- TODO: add <->
+term :: Parser Term
+term = (constTerm <|> varTerm <|> appTerm)
+
+constTerm :: Parser Term
+constTerm = do char '_'
+               name <- many1 alphaNum
+               return $ ConstTerm name
+
+varTerm :: Parser Term
+varTerm = do name <- many1 alphaNum
+             return $ VarTerm name
+
+termList :: Parser [Term]
+termList = sepBy (spaces *> char ',' *> spaces) term
+
+appTerm :: Parser Term
+appTerm = do name <- many1 alphaNum
+             subTerms <- paren termList
+             return $ AppTerm name subTerms
+
+--------------------------------------------------------------------------------
+-- Formulas
 
 formula :: Parser Formula
 formula = (iffFormula <|> implSubFormula)
@@ -148,10 +169,14 @@ orFormula = do a <- baseFormula
                return $ Or a sf
 
 baseFormula :: Parser Formula
-baseFormula = paren formula <|> terminalFormula <|> negFormula
+baseFormula = paren formula <|>
+              terminalFormula <|>
+              negFormula <|>
+              forallFormula <|>
+              existsFormula
 
 terminalFormula :: Parser Formula
-terminalFormula = atomFormula <|> bottomFormula
+terminalFormula = predFormula <|> bottomFormula
 
 negFormula :: Parser Formula
 negFormula = do char '~'
@@ -159,8 +184,38 @@ negFormula = do char '~'
                 bf <- baseFormula
                 return $ Implies bf Bottom
 
+forallFormula :: Parser Formula
+forallFormula = do string "forall"
+                   char ' '
+                   spaces
+                   x <- many1 alphaNum
+                   spaces
+                   char '.'
+                   spaces
+                   bf <- baseFormula
+                   return $ Forall x bf
+
+existsFormula :: Parser Formula
+existsFormula = do string "exists"
+                   char ' '
+                   spaces
+                   x <- many1 alphaNum
+                   spaces
+                   char '.'
+                   spaces
+                   bf <- baseFormula
+                   return $ Exists x bf
+
+predFormula :: Parser Formula
+predFormula = atomFormula <|> predAppFormula
+
 atomFormula :: Parser Formula
-atomFormula = do { name <- many1 alphaNum; return $ Atom name }
+atomFormula = do { name <- many1 alphaNum; return $ Pred name [] }
+
+predAppFormula :: Parser Formula
+predAppFormula = do name <- many1 alphaNum
+                    terms <- paren termList
+                    return $ Pred name terms
 
 bottomFormula :: Parser Formula
 bottomFormula = do { string "_|_"; return Bottom }

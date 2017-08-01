@@ -148,51 +148,77 @@ changeSubgoal env arg =
 -- TODO: make this prettier
 check :: Env -> String -> IO Env
 check env _ = do
-  case checkDerivation (calculus env) (goal env) of
-    Left d -> do
-      putStrLn "Error in subderivation: "
-      putStr $ ppDerivation (goal env)
-    Right () -> do
-      putStrLn $ "Valid derivation in " ++ name (calculus env)
+  -- case checkDerivation (calculus env) (goal env) of
+  --   Left d -> do
+  --     putStrLn "Error in subderivation: "
+  --     putStr $ ppDerivation (goal env)
+  --   Right () -> do
+  --     putStrLn $ "Valid derivation in " ++ name (calculus env)
+  putStrLn "check is not implemented currently."
   return env
 
-getBindings :: [FormulaPat] -> IO Assignment
-getBindings [] = return []
-getBindings (AtomPat p:pats) = do
+getFormBindings :: [FormulaPat] -> IO FormulaAssignment
+getFormBindings [] = return []
+getFormBindings (PredPat p:pats) = do
   putStr $ "Need binding for atom " ++ p ++ ":\n  " ++ p ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> atomFormula <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single atom identifier."
-             getBindings (AtomPat p:pats)
-    [(f,_)] -> do rest <- getBindings pats
+             getFormBindings (PredPat p:pats)
+    [(f,_)] -> do rest <- getFormBindings pats
                   return $ (p, [f]) : rest
     x -> error $ "multiple parses for atom: " ++ show x
-getBindings (VarPat a:pats) = do
+getFormBindings (FormPat a:pats) = do
   putStr $ "Need binding for variable " ++ a ++ ":\n  " ++ a ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> formula <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single formula."
-             getBindings (VarPat a:pats)
-    [(f,_)] -> do rest <- getBindings pats
+             getFormBindings (FormPat a:pats)
+    [(f,_)] -> do rest <- getFormBindings pats
                   return $ (a, [f]) : rest
     x -> error $ "multiple parses for atom: " ++ show x
-getBindings (SetPat gamma:pats) = do
+getFormBindings (SetPat gamma:pats) = do
   putStr $ "Need binding for formula list " ++ gamma ++ ":\n  " ++ gamma ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> formulaList <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a comma-separated list of formulas."
-             getBindings (SetPat gamma:pats)
-    [(fs,_)] -> do rest <- getBindings pats
+             getFormBindings (SetPat gamma:pats)
+    [(fs,_)] -> do rest <- getFormBindings pats
                    return $ (gamma, fs) : rest
     x -> error $ "multiple parses for atom: " ++ show x
-getBindings (pat:_) = error $ "can't bind pattern " ++ show pat
+getFormBindings (pat:_) = error $ "can't bind pattern " ++ show pat
 
+getTermBindings :: [TermPat] -> IO TermAssignment
+getTermBindings [] = return []
+getTermBindings (VarPat x:pats) = do
+  putStr $ "Need binding for variable [[" ++ x ++ "]]:\n  " ++ x ++ " ::= "
+  hFlush stdout
+  str <- getLine
+  let xs = parse (spaces *> many1 alphaNum <* end) str
+  case xs of
+    [] -> do putStrLn $ "Couldn't parse. Please enter a single variable identifier (like 'x')."
+             getTermBindings (VarPat x:pats)
+    [(y,_)] -> do rest <- getTermBindings pats
+                  return $ (x, VarTerm y) : rest
+    _ -> error $ "multiple parses for variable term: " ++ show x
+getTermBindings (TermPat t:pats) = do
+  putStr $ "Need binding for term [[" ++ t ++ "]]:\n  " ++ t ++ " ::= "
+  hFlush stdout
+  str <- getLine
+  let ts = parse (spaces *> term <* end) str
+  case ts of
+    [] -> do putStrLn $ "Couldn't parse. Please enter a term."
+             getTermBindings (TermPat t:pats)
+    [(t',_)] -> do rest <- getTermBindings pats
+                   return $ (t, t') : rest
+    _ -> error $ "multiple parses for variable term: " ++ show t
+    
 -- TODO: bug with g3ip, peirce
 getNextSubgoal :: Derivation -> GoalSpec -> GoalSpec
 getNextSubgoal der spec = getNextSubgoal' (map fst $ stubs der) where
@@ -211,31 +237,42 @@ rule env arg =
           case rules !!! (ruleNum-1) of
             Nothing -> do putStrLn $ "No rule corresponding to " ++ ruleString
                           return env
-            Just (name, assignment) -> do
-              let unboundVars = tryRule (calculus env) name assignment
-              extraBindings <- getBindings unboundVars
-              putStrLn $ "Applying " ++ name ++ "."
-              let Just newGoal = applyRule (calculus env) name (extraBindings ++ assignment) (subgoal env) (goal env)
-              let nextSubgoal = getNextSubgoal newGoal (subgoal env)
-              putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
-                ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
-              return env { goal = newGoal, subgoal = nextSubgoal }
+            Just (name, formBinding, termBinding) -> do
+              -- TODO: fix this. tryRule returns a list of unbound terms as well.
+              let (unboundForms, unboundTerms) = tryRule (calculus env) name formBinding termBinding
+              extraFormBindings <- getFormBindings unboundForms
+              extraTermBindings <- getTermBindings unboundTerms
+              -- TODO: get term bindings for unbound terms
+              case applyRule (calculus env) name
+                                 (extraFormBindings ++ formBinding)
+                                 (extraTermBindings ++ termBinding)
+                                 (subgoal env)
+                                 (goal env) of
+                Just newGoal -> do
+                  putStrLn $ "Applying " ++ name ++ "."
+                  let nextSubgoal = getNextSubgoal newGoal (subgoal env)
+                  putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
+                    ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
+                  return env { goal = newGoal, subgoal = nextSubgoal }
+                Nothing -> do
+                  putStrLn "Invalid instantiation."
+                  return env
   where ruleString = dropWhile (== ' ') arg
         -- TODO: fix this kludge; we really just need to make ruleNum a maybe, and
         -- handle it above.
         ruleNum = case readMaybe ruleString of
                     Just num -> num
                     Nothing  -> 0
-        showRule n (name, assignment) =
+        showRule n (name, formBinding, termBinding) =
           case prems of
             [] ->
               "  " ++ show n ++ ". " ++ name ++ " with no obligations"
             [prem] ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations: " ++
-              showSequentInst assignment prem
+              showSequentInst formBinding termBinding prem
             _      -> 
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++
-              intercalate "\n     " (map (showSequentInst assignment) prems)
+              intercalate "\n     " (map (showSequentInst formBinding termBinding) prems)
           where Just (prems, _) = lookup name (rules (calculus env))
         showRules n [] = []
         showRules n (x:xs) = showRule n x : showRules (n+1) xs
@@ -251,11 +288,12 @@ axiom env arg =
           case axioms !!! (axiomNum-1) of
             Nothing -> do putStrLn $ "No axiom corresponding to " ++ axiomString
                           return env
-            Just (name, assignment) -> do
+            Just (name, formBinding, termBinding) -> do
               -- we should never have any unbound variables for an axiom, but we
               -- provide this just for the sake of completeness.
-              let unboundVars = tryAxiom (calculus env) name assignment
-              extraBindings <- getBindings unboundVars
+              -- TODO: fix this. tryAxiom returns a list of unbound terms as well.
+              let unboundVars = fst $ tryAxiom (calculus env) name formBinding termBinding
+              extraBindings <- getFormBindings unboundVars
               putStrLn $ "Applying " ++ name ++ "."
               let Just newGoal = applyAxiom (calculus env) name (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
@@ -266,10 +304,10 @@ axiom env arg =
         axiomNum = case readMaybe axiomString of
                     Just num -> num
                     Nothing  -> 0
-        showAxiom n (name, assignment) = "  " ++ show n ++ ". " ++ name ++ " with " ++ showAssignment assignment
+        showAxiom n (name, formBinding, termBinding) = "  " ++ show n ++ ". " ++ name ++ " with " ++ showFormulaAssignment formBinding
         showAxioms n [] = []
         showAxioms n (x:xs) = showAxiom n x : showAxioms (n+1) xs
-        showAssignment bindings = intercalate ", " (map showBinding bindings)
+        showFormulaAssignment bindings = intercalate ", " (map showBinding bindings)
         showBinding (var, [f]) = var ++ " := " ++ show f
         showBinding (var, fs)  = var ++ " := [" ++ intercalate "," (map show fs) ++ "]"
 
@@ -349,7 +387,7 @@ introMessage =
 main :: IO ()
 main = do
   putStr introMessage
-  repl $ Env { goal = Stub ([] :=> [Implies (Atom "p") (Atom "p")])
+  repl $ Env { goal = Stub ([] :=> [Implies (Pred "P" []) (Pred "P" [])])
              , subgoal = []
              , calculus = head calculi
              , quitFlag = False
