@@ -1,4 +1,5 @@
 # logix (Logic Explorer)
+# Version 0.2.0
 Copyright Ben Selfridge 2017
 
 An interactive proof assistant for sequent calculi.
@@ -15,10 +16,10 @@ but with more general capabilities and a slightly more intuitive interface.
 
 ### Improvements on PESCA
 
-One limitation of PESCA was that it was could only work with sequent calculi
-with top-down determinacy. That is, given a rule, and an instantiation of the
-conclusion of that rule, there is no ambiguity as to how to instantiate the
-premises. From the appendix on PESCA in Negri & von Plato:
+One limitation of PESCA was that it could only work with sequent calculi with
+top-down determinacy. That is, given a rule, and an instantiation of the conclusion
+of that rule, there is no ambiguity as to how to instantiate the premises. From the
+appendix on PESCA in Negri & von Plato:
 
 > The domain of sequent calculi allows for indefinitely many variations, which
 > are not due to disagreements on what should be provable but to different
@@ -35,17 +36,17 @@ premises. From the appendix on PESCA in Negri & von Plato:
 >
 >    *Given a conclusion and a rule, the premisses are determined.*
 
-This means that any calculus with separate contexts was off the
-table. This is a pretty severe limitation, and it's not a fundamental one. It
-came from the way calculi were specified in PESCA; a rule is just a *function*
-that takes a sequent as an argument and returns a list of sequents as premises,
-or additional proof obligations. So, for instance, you could specify a shared
-context rule like
+This means that any calculus with separate contexts was off the table. This is a
+pretty severe limitation (at least in terms of the ability to encode the various
+logics in that book), and it's not a fundamental one. It came from the way calculi
+were specified in PESCA; a rule is just a *function* that takes a sequent as an
+argument and returns a list of sequents as premises, or additional proof
+obligations. So, for instance, you could specify a shared context rule like
 
 ```
-  A, B, Gamma => Delta
-  --------------------- (L&)
-  A & B, Gamma => Delta
+  A, B, Γ => Δ
+  ------------- (&)
+  A & B, Γ => Δ
 ```
 
 because the (single) premise is a function of the conclusion; that is, given a
@@ -53,22 +54,22 @@ fixed conjunctive formula `A & B` in the sequent to be derived, we can generate
 the premises with no ambiguity. This forbids, for instance, a rule like
 
 ```
-  Gamma => A   Delta => B
-  ----------------------- (R&)
-   Gamma, Delta => A & B
+  Γ => A   Δ => B
+  --------------- (R&)
+   Γ, Δ => A & B
 ```
 
-because we have two contexts in the conclusion that must be "split" in the two
+because we have two contexts in the conclusion that must be split in the two
 premises, but there's no deterministic way to tell *how* they should be
 split. However, this is easily solved by just listing all possible ways to
 separate the antecedent formulas in the conclusion into the separate contexts
-`Gamma` and `Delta`. Another example is the following rendering of the law of
+`Γ` and `Δ`. Another example is the following rendering of the law of
 excluded middle:
 
 ```
-  P, Gamma => C   ~P, Delta => C
-  ------------------------------ (EM)
-        Gamma, Delta => C
+  P, Γ => C   ~P, Δ => C
+  ---------------------- (EM)
+        Γ, Δ => C
 ```
 
 This rule (and the rule `R&` above it) are used in the classical
@@ -99,42 +100,59 @@ In summary, the improvements on PESCA can be summarized as follows:
 
 In logix, specification of deduction rules is based on the concept of
 *patterns.* Every rule corresponds to a pattern, or a set of patterns, that
-match against particular instances of that rule. As an example, the G0ip
+match against particular instances of that rule. As an example, the G0i
 calculus (with separate contexts) is specified as follows:
 
 ```
-p = AtomPat "P"
-a = VarPat "A"
-b = VarPat "B"
-c = VarPat "C"
-gamma = SetPat "Gamma"
-delta = SetPat "Delta"
+p = PredPat "P"
+a = FormPat "A"
+b = FormPat "B"
+c = FormPat "C"
+gamma  = SetPat "Γ"
+gamma' = SetPat "Γ'"
+delta  = SetPat "Δ"
+delta' = SetPat "Δ'"
+a_x_y = SubstPat "x" (VarPat "y") "A"
+a_x_t = SubstPat "x" (TermPat "t") "A"
+forall_x_a = ForallPat "x" a
+exists_x_a = ExistsPat "x" a
+nofree_y = NoFreePat "y"
 
+g0ip :: Calculus
 g0ip = Calculus {
   name = "g0ip",
-  axioms = [("Axiom", [p] ::=> [p])],
+  axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
-              [gamma, delta] ::=> [a $& b]))
+            [gamma, delta] ::=> [a $& b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-               [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a $| b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-               [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a $| b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-               [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a $> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-              [a $& b, gamma] ::=> [c]))
+            [a $& b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, delta] ::=> [c] ],
-              [a $| b, gamma, delta] ::=> [c]))
+            [a $| b, gamma, delta] ::=> [c]))
   , ("L->", ([ [gamma] ::=> [a], [b, delta] ::=> [c] ],
-               [a $> b, gamma, delta] ::=> [c]))
+             [a $> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
               [botpat] ::=> [c]))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
+            [ forall_x_a, gamma] ::=> [c]))
+  , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
+            [nofree_y gamma] ::=> [nofree_y forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [c] ],
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y c]))
+  , ("Rexists", ([ [gamma] ::=> [a_x_t] ],
+            [gamma] ::=> [exists_x_a]))
   , ("Wk", ([ [gamma] ::=> [c] ],
-              [a, gamma] ::=> [c]))
+            [a, gamma] ::=> [c]))
   , ("Ctr", ([ [a, a, gamma] ::=> [c] ],
-               [a, gamma] ::=> [c]))
+             [a, gamma] ::=> [c]))
   ]}
+
 ```
 
 This is almost a verbatim translation of the listing of this calculus in
@@ -151,8 +169,8 @@ It's not difficult to decipher the meaning here. If in the course of a
 derivation in logix, the `R&` rule applies to the current subgoal, the user will
 be presented with every valid instantiation of this rule (in particular, every
 possible way to split the antecedents of the subgoal into separate contexts
-Gamma and Delta). This may seem like overkill, but if one wants to construct
-proofs in a not-very-tractable calculus like G0ip, it's nice to be able to see
+Γ and Δ). This may seem like overkill, but if one wants to construct
+proofs in a not-very-tractable calculus like G0i, it's nice to be able to see
 every potential instance of an applicable rule.
 
 logix was designed from the start to be maximally extensible. We have ideas for
@@ -191,9 +209,9 @@ you can start it up as follows:
 
 ```
 $ logix
-LogiX (Logic Explorer)
+LogiX (Logic Explorer) v. 0.2.0
 interactive proof assistant for sequent calculi
-copyright Ben Selfridge 2017
+(c) Ben Selfridge 2017
 
 Type "help" for a list of commands.
 >
@@ -206,6 +224,7 @@ sequent `a | b => ~(~a & ~b) & (b <-> b)`:
 
 ```
 > top a | b => ~(~a & ~b) & (b <-> b)
+Changing goal to "a | b => ~(~a & ~b) & (b <-> b)".
 ```
 
 If you enter the sequent incorrectly, logix will report a parse error and not
@@ -213,30 +232,28 @@ give you any helpful information. This is something that needs to be improved,
 but it's still easy enough to figure out what you did wrong. logix can
 automatically parenthesize expressions; ~ binds the tightest, then & and |, then
 ->, and finally <-> binds the loosest. Every binary connective is right
-associative, so
+associative:
 
 ```
 > top => a -> b -> a
+Changing goal to " => a -> (b -> a)".
 ```
-
-gets parsed as `=> a -> (b -> a)` (which is probably what you'd want in this
-particular example!)
 
 If you need any help using logix, feel free to contact me at my email address,
 benselfridge at gmail dot com.
 
 ## More info & current status
 
-Currently, logix only supports propositional calculus because it is still at a
-proof-of-concept stage of development. However, I have plans to support full
-first-order predicate calculus with equality in the very near future (I want to
-do some group theory!). Aside from that (temporary) limitation, logix can pretty
-much represent any sequent calculus I know of. The only exceptions from [1] are
-the GN, GM, NG and MG calculi, which use patterns like A^n, representing *any
-number of appearances* of formula A. This could be added as a new kind of
-pattern, but I have not prioritized that at this stage.
+Currently, logix supports predicate calculus without equality. However, I have plans
+to support term equality in the very near future (I want to do some group
+theory!). Aside from that (temporary) limitation, logix can pretty much represent any
+sequent calculus I know of. The only exceptions from [1] are the GN, GM, NG and MG
+calculi, which use patterns like A^n, representing *any number of appearances* of
+formula A. This could be added as a new kind of pattern, but I have not prioritized
+that at this stage.
 
-Please contact me if you have any feedback or questions.
+Please contact me if you have any feedback or questions, and especially if you
+discover a bug.
 
 ## References
 

@@ -26,7 +26,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3cp, g3i, g3ip, g0ip, g0cp, g0ip_em, g3ipm, hilbert]
+calculi = [g3c, g3i, g0c, g0i, g0ip_em, g3ipm, hilbert]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -43,6 +43,7 @@ a_x_y = SubstPat "x" (VarPat "y") "A"
 a_x_t = SubstPat "x" (TermPat "t") "A"
 forall_x_a = ForallPat "x" a
 exists_x_a = ExistsPat "x" a
+nofree_y = NoFreePat "y"
 
 -- | Infix AndPat.
 ($&) = AndPat
@@ -62,29 +63,54 @@ negpat pat = pat $> botpat
 -- | Bottom pattern.
 botpat = BottomPat
 
--- | G3ip, a contraction-free calculus for intuitionistic logic with shared
--- contexts. A good calculus for proof search of intuitionistic formulas.
-g3ip :: Calculus
-g3ip = Calculus {
-  name = "g3ip",
-  axioms = [("Axiom", [p, gamma] ::=> [p])],
-  rules = 
-  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
-            [gamma] ::=> [a $& b]))
-  , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
-  , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
-  , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
-  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
-            [a $| b, gamma] ::=> [c]))
-  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
-             [a $> b, gamma] ::=> [c]))
+g3c :: Calculus
+g3c = Calculus {
+  name = "g3c",
+  axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
+  rules =
+  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+            [a $& b, gamma] ::=> [delta]))
+  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
+            [a $| b, gamma] ::=> [delta]))
+  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
+             [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [c]))
+              [botpat, gamma] ::=> [delta]))
+  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
+             [gamma] ::=> [delta, a $> b]))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
+            [forall_x_a, gamma] ::=> [delta]))
+  , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
+            [nofree_y gamma] ::=> [nofree_y delta, nofree_y forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [delta] ],
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y delta]))
+  , ("Rexists", ([ [gamma] ::=> [delta, exists_x_a, a_x_t] ],
+            [gamma] ::=> [delta, exists_x_a]))
+  ]}
+
+g3cp :: Calculus
+g3cp = Calculus {
+  name = "g3cp",
+  axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
+  rules =
+  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+            [a $& b, gamma] ::=> [delta]))
+  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
+            [a $| b, gamma] ::=> [delta]))
+  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
+             [a $> b, gamma] ::=> [delta]))
+  , ("L_|_", ([],
+              [botpat, gamma] ::=> [delta]))
+  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
+             [gamma] ::=> [delta, a $> b]))
   ]}
 
 g3i :: Calculus
@@ -111,71 +137,64 @@ g3i = Calculus {
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
             [ forall_x_a, gamma] ::=> [c]))
   , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
-            [NoFreePat "y" gamma] ::=> [NoFreePat "y" forall_x_a]))
+            [nofree_y gamma] ::=> [nofree_y forall_x_a]))
   , ("Lexists", ([ [a_x_y, gamma] ::=> [c] ],
-            [NoFreePat "y" exists_x_a, NoFreePat "y" gamma] ::=> [NoFreePat "y" c]))
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y c]))
   , ("Rexists", ([ [gamma] ::=> [a_x_t] ],
             [gamma] ::=> [exists_x_a]))
   ]}
 
--- | G3cp, a contraction-free calculus for classical logic with shared contexts. This
--- calculus is ideally suited for proof search, as any given sequent usually has at
--- most one rule that applies to it.
-g3cp :: Calculus
-g3cp = Calculus {
-  name = "g3cp",
-  axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
-  rules =
-  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
-            [a $& b, gamma] ::=> [delta]))
-  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-            [a $| b, gamma] ::=> [delta]))
-  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
-             [a $> b, gamma] ::=> [delta]))
+g3ip :: Calculus
+g3ip = Calculus {
+  name = "g3ip",
+  axioms = [("Axiom", [p, gamma] ::=> [p])],
+  rules = 
+  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
+            [gamma] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
+            [a $| b, gamma] ::=> [c]))
+  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a $> b, gamma] ::=> [c]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [delta]))
-  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
-             [gamma] ::=> [delta, a $> b]))
+              [botpat, gamma] ::=> [c]))
   ]}
 
-g3c :: Calculus
-g3c = Calculus {
-  name = "g3c",
-  axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
+g0i :: Calculus
+g0i = Calculus {
+  name = "g0ip",
+  axioms = [("Axiom", [a] ::=> [a])],
   rules =
-  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
-            [a $& b, gamma] ::=> [delta]))
-  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-            [a $| b, gamma] ::=> [delta]))
-  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
-             [a $> b, gamma] ::=> [delta]))
+  [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
+            [gamma, delta] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, delta] ::=> [c] ],
+            [a $| b, gamma, delta] ::=> [c]))
+  , ("L->", ([ [gamma] ::=> [a], [b, delta] ::=> [c] ],
+             [a $> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [delta]))
-  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
-             [gamma] ::=> [delta, a $> b]))
-  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
-            [forall_x_a, gamma] ::=> [delta]))
-  , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
-            [NoFreePat "y" gamma] ::=> [NoFreePat "y" delta, NoFreePat "y" forall_x_a]))
-  , ("Lexists", ([ [a_x_y, gamma] ::=> [delta] ],
-            [NoFreePat "y" exists_x_a, NoFreePat "y" gamma] ::=> [NoFreePat "y" delta]))
-  , ("Rexists", ([ [gamma] ::=> [delta, exists_x_a, a_x_t] ],
-            [gamma] ::=> [delta, exists_x_a]))
-              
+              [botpat] ::=> [c]))
+  , ("
+  , ("Wk", ([ [gamma] ::=> [c] ],
+            [a, gamma] ::=> [c]))
+  , ("Ctr", ([ [a, a, gamma] ::=> [c] ],
+             [a, gamma] ::=> [c]))
   ]}
 
--- | G0ip, a calculus for intuitionistic logic with independent contexts. Not a great
--- calculus for proof search due to the independent contexts, and the fact that we
--- usually need to explicitly use weakening and/or contraction in order to prove
--- simple formulas.
 g0ip :: Calculus
 g0ip = Calculus {
   name = "g0ip",
@@ -197,14 +216,57 @@ g0ip = Calculus {
              [a $> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
               [botpat] ::=> [c]))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
+            [ forall_x_a, gamma] ::=> [c]))
+  , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
+            [nofree_y gamma] ::=> [nofree_y forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [c] ],
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y c]))
+  , ("Rexists", ([ [gamma] ::=> [a_x_t] ],
+            [gamma] ::=> [exists_x_a]))
   , ("Wk", ([ [gamma] ::=> [c] ],
             [a, gamma] ::=> [c]))
   , ("Ctr", ([ [a, a, gamma] ::=> [c] ],
              [a, gamma] ::=> [c]))
   ]}
 
--- | G0cp, a calculus for classical logic with independent contexts. Not a great
--- calculus for proof search for the same reasons as G0ip.
+g0c :: Calculus
+g0c = Calculus {
+  name = "g0c",
+  axioms = [("Axiom", [a] ::=> [a])],
+  rules =
+  [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma'] ::=> [delta', b] ],
+                [gamma, gamma'] ::=> [delta, delta', a $& b]))
+  , ("R|",   ([ [gamma] ::=> [delta, a, b] ],
+                [gamma] ::=> [delta, a $| b]))
+  , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
+                [gamma] ::=> [delta, a $> b]))
+  , ("L_|_", ([ ],
+              [botpat] ::=> [c]))
+  , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
+                [a $& b, gamma] ::=> [delta]))
+  , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma'] ::=> [delta'] ],
+                [a $| b, gamma, gamma'] ::=> [delta, delta']))
+  , ("L->",  ([ [gamma] ::=> [delta, a], [b, gamma'] ::=> [delta'] ],
+                [a $> b, gamma, gamma'] ::=> [delta, delta']))
+  , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
+            [forall_x_a, gamma] ::=> [delta]))
+  , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
+            [nofree_y gamma] ::=> [nofree_y delta, nofree_y forall_x_a]))
+  , ("Lexists", ([ [a_x_y, gamma] ::=> [delta] ],
+            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y delta]))
+  , ("Rexists", ([ [gamma] ::=> [delta, exists_x_a, a_x_t] ],
+            [gamma] ::=> [delta, exists_x_a]))
+  , ("LW",   ([ [gamma] ::=> [delta] ],
+                [a, gamma] ::=> [delta]))
+  , ("RW",   ([ [gamma] ::=> [delta] ],
+                [gamma] ::=> [delta, a]))
+  , ("LC",   ([ [a, a, gamma] ::=> [delta] ],
+                [a, gamma] ::=> [delta]))
+  , ("RC",   ([ [gamma] ::=> [delta, a, a] ],
+                [gamma] ::=> [delta, a]))
+  ] }
+
 g0cp :: Calculus
 g0cp = Calculus {
   name = "g0cp",
@@ -234,8 +296,6 @@ g0cp = Calculus {
                 [gamma] ::=> [delta, a]))
   ] }
 
--- | G0ip with the law of excluded middle, so a classical sequent calculus with
--- independent contexts.
 g0ip_em :: Calculus
 g0ip_em = Calculus {
   name = "g0ip_em",

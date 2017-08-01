@@ -12,6 +12,8 @@ import Data.List.Split
 import Data.Maybe
 import System.IO
 
+version = "0.2.0"
+
 -- TODO: separate this out into a Utils.hs file
 (!!!) :: [a] -> Int -> Maybe a
 infixl 9 !!!
@@ -37,6 +39,8 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: add history command
+-- TODO: "examples" command that spits out examples of how to write formulas
 -- TODO: add a unicode option. requires separating all show instances into a separate
 -- library. 
 -- TODO: add "clear" command to turn current subgoal into a stub.
@@ -379,9 +383,9 @@ repl env = do
 
 introMessage :: String
 introMessage =
-  "LogiX (Logic Explorer)\n" ++
+  "LogiX (Logic Explorer) v. " ++ version ++ "\n" ++
   "interactive proof assistant for sequent calculi\n" ++ 
-  "copyright Ben Selfridge 2017\n\n" ++
+  "(c) Ben Selfridge 2017\n\n" ++
   "Type \"help\" for a list of commands.\n"
 
 main :: IO ()
