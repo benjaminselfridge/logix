@@ -509,6 +509,8 @@ getGoal (x:xs) (Der _ _ ders) = do
   getGoal xs der
 getGoal _ _ = Nothing
 
+This breaks the build!!!
+
 -- | Get the conclusion of a derivation (the sequent that appears underneath the line).
 conclusion :: Derivation -> Sequent
 conclusion (Stub  sequent)     = sequent
