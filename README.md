@@ -224,8 +224,24 @@ sequent `a | b => ~(~a & ~b) & (b <-> b)`:
 
 ```
 > top a | b => ~(~a & ~b) & (b <-> b)
-Changing goal to "a | b => ~(~a & ~b) & (b <-> b)".
+Changing goal to "a ∨ b ⇒ ¬(¬a & ¬b) & (b ↔ b)".
 ```
+
+The important thing is to remember the special symbols; `=>` is the sequent
+separator, which divides the left- and right-hand sides of a sequent. The binary
+operators `&`, `|`, `->`, and `<->` are self-explanatory. `~` is unary
+negation. `_|_` is bottom, or false. `a <-> b` and `~a` are both just abbreviations
+for `(a -> b) & (b -> a)` and `(a -> _|_)`, respectively. Quantifiers are input via
+`forall x. P(x)` and `exists x. P(x)`. Below is an illustration of how we would
+begin a proof that the classic "Barber's paradox" is unsatisfiable:
+
+```
+> top => ~exists x. (Man(x) & forall y. (Man(y) -> (Shaves(x,y) <-> ~Shaves(y,y))))
+Changing goal to " ⇒ ¬∃x.(Man(x) & ∀y.(Man(y) ⊃ (Shaves(x, y) ↔ ¬Shaves(y, y))))".
+```
+
+By default, logix displays sequents using unicode symbols for all these connectives,
+but you can turn that off with the `unicode` command.
 
 If you enter the sequent incorrectly, logix will report a parse error and not give
 you any helpful information. logix can automatically parenthesize expressions; ~,
@@ -234,7 +250,7 @@ loosest. Every binary connective is right associative:
 
 ```
 > top => a -> b & c & d -> a
-Changing goal to " => a -> ((b & (c & d)) -> a)".
+Changing goal to " ⇒ a ⊃ ((b & (c & d)) ⊃ a)".
 ```
 
 ## More info & current status
