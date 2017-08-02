@@ -1,5 +1,5 @@
 # logix (Logic Explorer)
-# Version 0.2.0
+Version 0.2.0
 Copyright Ben Selfridge 2017
 
 An interactive proof assistant for sequent calculi.
@@ -227,20 +227,15 @@ sequent `a | b => ~(~a & ~b) & (b <-> b)`:
 Changing goal to "a | b => ~(~a & ~b) & (b <-> b)".
 ```
 
-If you enter the sequent incorrectly, logix will report a parse error and not
-give you any helpful information. This is something that needs to be improved,
-but it's still easy enough to figure out what you did wrong. logix can
-automatically parenthesize expressions; ~ binds the tightest, then & and |, then
-->, and finally <-> binds the loosest. Every binary connective is right
-associative:
+If you enter the sequent incorrectly, logix will report a parse error and not give
+you any helpful information. logix can automatically parenthesize expressions; ~,
+forall and exists bind the tightest, then & and |, then ->, and finally <-> binds the
+loosest. Every binary connective is right associative:
 
 ```
-> top => a -> b -> a
-Changing goal to " => a -> (b -> a)".
+> top => a -> b & c & d -> a
+Changing goal to " => a -> ((b & (c & d)) -> a)".
 ```
-
-If you need any help using logix, feel free to contact me at my email address,
-benselfridge at gmail dot com.
 
 ## More info & current status
 

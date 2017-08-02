@@ -32,6 +32,7 @@ data Env = Env { goal     :: Derivation
                , calculus :: Calculus
                , quitFlag :: Bool
                , pretty   :: Bool
+               , unicode  :: Bool
                }
 
 getCurrentGoal :: Env -> Derivation
@@ -39,11 +40,12 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: maybe a manual mode, where the user can input the substitution for a
+-- particular rule manually? "use" command might be cool
 -- TODO: add history command
 -- TODO: "examples" command that spits out examples of how to write formulas
 -- TODO: add a unicode option. requires separating all show instances into a separate
 -- library. 
--- TODO: add "clear" command to turn current subgoal into a stub.
 -- TODO: print help commands with a fixed width.
 -- TODO: after switching subgoals, either directly or by applying a rule or axiom,
 -- print all applicable rules.
@@ -70,6 +72,9 @@ commands = [ ("help", ("Print all commands.",
                        " just prints the current subgoal.",
                        ["<subgoal id>"],
                        changeSubgoal))
+           , ("clear", ("Clear the derivation at a particular subgoal.",
+                        ["<subgoal>"],
+                        clear))
            , ("check", ("Check that each step in a derivation is valid.",
                         [],
                         check))
@@ -79,6 +84,9 @@ commands = [ ("help", ("Print all commands.",
            , ("pretty", ("Toggle pretty printing for proof tree.",
                          [],
                          togglePretty))
+           , ("unicode", ("Toggle unicode printing.",
+                          [],
+                          toggleUnicode))
            , ("calc", ("Change current calculus. If given no argument, " ++
                        "just prints the current calculus.",
                        ["<calcName>"],
@@ -104,12 +112,12 @@ help env _ = do mapM_ showCommand commands
 setGoal :: Env -> String -> IO Env
 setGoal env arg =
   if null goalString
-  then do print $ conclusion (goal env)
+  then do putStrLn $ ppSequent (unicode env) $ conclusion (goal env)
           return env
   else case parse (sequent <* end) goalString of
     [] -> do putStrLn $ "Couldn't parse sequent \"" ++ goalString ++ "\"."
              return env
-    [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ show sequent ++ "\"."
+    [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
                         return $ env { goal = Stub sequent,
                                      subgoal = []
                                    }
@@ -122,26 +130,45 @@ listGoals env _ = do
   return env
   where printGoal ([], sequent) = do
           putStr $ if [] == (subgoal env) then " *" else "  "
-          putStrLn $ "top: " ++ show sequent
+          putStrLn $ "top: " ++ ppSequent (unicode env) sequent
         printGoal (spec, sequent) = do
           putStr $ if spec == (subgoal env) then " *" else "  "
           putStr $ ppGoalSpec spec
-          putStrLn $ ": " ++ show sequent
+          putStrLn $ ": " ++ ppSequent (unicode env) sequent
 
 changeSubgoal :: Env -> String -> IO Env
 changeSubgoal env arg =
   if null subgoalString
   then do let der = getCurrentGoal env
-          putStr $ "Current subgoal: " ++ show (conclusion der)
+          putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion der)
           putStrLn $ " [" ++ ppGoalSpec (subgoal env) ++ "]"
           return env
   else case getGoal subgoalSpec (goal env) of
          Nothing  -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
                         return env
          Just der -> do
-           putStr $ "Current subgoal: " ++ show (conclusion der)
+           putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion der)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
            return $ env { subgoal = subgoalSpec }
+  where subgoalString = dropWhile (== ' ') arg
+        subgoalSpec = if subgoalString == "top"
+                      then []
+                      else case sequence $ map readMaybe (splitOn "." subgoalString) of
+                             Just spec -> spec
+                             Nothing   -> []
+
+clear :: Env -> String -> IO Env
+clear env arg =
+  if null subgoalString
+  then do putStrLn "Please provide a goal (e.g. 1.2.2)"
+          return env
+  else case clearSubgoal subgoalSpec (goal env) of
+         Nothing -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
+                       return env
+         Just newGoal -> do
+           putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion newGoal)
+           putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
+           return $ env { goal = newGoal, subgoal = subgoalSpec }
   where subgoalString = dropWhile (== ' ') arg
         subgoalSpec = if subgoalString == "top"
                       then []
@@ -161,72 +188,76 @@ check env _ = do
   putStrLn "check is not implemented currently."
   return env
 
-getFormBindings :: [FormulaPat] -> IO FormulaAssignment
-getFormBindings [] = return []
-getFormBindings (PredPat p:pats) = do
+getFormBindings :: Bool -> [FormulaPat] -> IO FormulaAssignment
+getFormBindings unicode [] = return []
+getFormBindings unicode (PredPat p:pats) = do
   putStr $ "Need binding for atom " ++ p ++ ":\n  " ++ p ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> atomFormula <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single atom identifier."
-             getFormBindings (PredPat p:pats)
-    [(f,_)] -> do rest <- getFormBindings pats
+             getFormBindings unicode (PredPat p:pats)
+    [(f,_)] -> do rest <- getFormBindings unicode pats
                   return $ (p, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ show x
-getFormBindings (FormPat a:pats) = do
+    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
+getFormBindings unicode (FormPat a:pats) = do
   putStr $ "Need binding for variable " ++ a ++ ":\n  " ++ a ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> formula <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single formula."
-             getFormBindings (FormPat a:pats)
-    [(f,_)] -> do rest <- getFormBindings pats
+             getFormBindings unicode (FormPat a:pats)
+    [(f,_)] -> do rest <- getFormBindings unicode pats
                   return $ (a, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ show x
-getFormBindings (SetPat gamma:pats) = do
+    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
+getFormBindings unicode (SetPat gamma:pats) = do
   putStr $ "Need binding for formula list " ++ gamma ++ ":\n  " ++ gamma ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> formulaList <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a comma-separated list of formulas."
-             getFormBindings (SetPat gamma:pats)
-    [(fs,_)] -> do rest <- getFormBindings pats
+             getFormBindings unicode (SetPat gamma:pats)
+    [(fs,_)] -> do rest <- getFormBindings unicode pats
                    return $ (gamma, fs) : rest
-    x -> error $ "multiple parses for atom: " ++ show x
-getFormBindings (pat:_) = error $ "can't bind pattern " ++ show pat
+    x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode) (map fst x))
+getFormBindings unicode (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
 
-getTermBindings :: [TermPat] -> IO TermAssignment
-getTermBindings [] = return []
-getTermBindings (VarPat x:pats) = do
-  putStr $ "Need binding for variable [[" ++ x ++ "]]:\n  " ++ x ++ " ::= "
+getTermBindings :: Bool -> [TermPat] -> IO TermAssignment
+getTermBindings unicode [] = return []
+getTermBindings unicode (VarPat x:pats) = do
+  putStr $ "Need binding for variable <" ++ x ++ ">:\n  " ++ x ++ " ::= "
   hFlush stdout
   str <- getLine
   let xs = parse (spaces *> many1 alphaNum <* end) str
   case xs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single variable identifier (like 'x')."
-             getTermBindings (VarPat x:pats)
-    [(y,_)] -> do rest <- getTermBindings pats
+             getTermBindings unicode (VarPat x:pats)
+    [(y,_)] -> do rest <- getTermBindings unicode pats
                   return $ (x, VarTerm y) : rest
     _ -> error $ "multiple parses for variable term: " ++ show x
-getTermBindings (TermPat t:pats) = do
-  putStr $ "Need binding for term [[" ++ t ++ "]]:\n  " ++ t ++ " ::= "
+getTermBindings unicode (TermPat t:pats) = do
+  putStr $ "Need binding for term <" ++ t ++ ">:\n  " ++ t ++ " ::= "
   hFlush stdout
   str <- getLine
   let ts = parse (spaces *> term <* end) str
   case ts of
     [] -> do putStrLn $ "Couldn't parse. Please enter a term."
-             getTermBindings (TermPat t:pats)
-    [(t',_)] -> do rest <- getTermBindings pats
+             getTermBindings unicode (TermPat t:pats)
+    [(t',_)] -> do rest <- getTermBindings unicode pats
                    return $ (t, t') : rest
     _ -> error $ "multiple parses for variable term: " ++ show t
     
--- TODO: bug with g3ip, peirce
+getFirstSubgoal :: Derivation -> GoalSpec
+getFirstSubgoal der = case stubs der of
+  []          -> []
+  ((subgoal, _):_) -> subgoal
+
 getNextSubgoal :: Derivation -> GoalSpec -> GoalSpec
 getNextSubgoal der spec = getNextSubgoal' (map fst $ stubs der) where
-  getNextSubgoal' [] = []
+  getNextSubgoal' [] = getFirstSubgoal der
   getNextSubgoal' (stubSpec:specs) | spec <= stubSpec = stubSpec
                                    | otherwise = getNextSubgoal' specs
 
@@ -244,8 +275,8 @@ rule env arg =
             Just (name, formBinding, termBinding) -> do
               -- TODO: fix this. tryRule returns a list of unbound terms as well.
               let (unboundForms, unboundTerms) = tryRule (calculus env) name formBinding termBinding
-              extraFormBindings <- getFormBindings unboundForms
-              extraTermBindings <- getTermBindings unboundTerms
+              extraFormBindings <- getFormBindings (unicode env) unboundForms
+              extraTermBindings <- getTermBindings (unicode env) unboundTerms
               -- TODO: get term bindings for unbound terms
               case applyRule (calculus env) name
                                  (extraFormBindings ++ formBinding)
@@ -256,7 +287,7 @@ rule env arg =
                   putStrLn $ "Applying " ++ name ++ "."
                   let nextSubgoal = getNextSubgoal newGoal (subgoal env)
                   putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
-                    ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
+                    ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
                   return env { goal = newGoal, subgoal = nextSubgoal }
                 Nothing -> do
                   putStrLn "Invalid instantiation."
@@ -273,10 +304,10 @@ rule env arg =
               "  " ++ show n ++ ". " ++ name ++ " with no obligations"
             [prem] ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations: " ++
-              showSequentInst formBinding termBinding prem
+              ppSequentInst (unicode env) formBinding termBinding prem
             _      -> 
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++
-              intercalate "\n     " (map (showSequentInst formBinding termBinding) prems)
+              intercalate "\n     " (map (ppSequentInst (unicode env) formBinding termBinding) prems)
           where Just (prems, _) = lookup name (rules (calculus env))
         showRules n [] = []
         showRules n (x:xs) = showRule n x : showRules (n+1) xs
@@ -297,30 +328,30 @@ axiom env arg =
               -- provide this just for the sake of completeness.
               -- TODO: fix this. tryAxiom returns a list of unbound terms as well.
               let unboundVars = fst $ tryAxiom (calculus env) name formBinding termBinding
-              extraBindings <- getFormBindings unboundVars
+              extraBindings <- getFormBindings (unicode env) unboundVars
               putStrLn $ "Applying " ++ name ++ "."
               let Just newGoal = applyAxiom (calculus env) name (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
               putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
-                ": " ++ show (conclusion (fromJust (getGoal nextSubgoal newGoal)))
+                ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
               return env { goal = newGoal, subgoal = nextSubgoal }
   where axiomString = dropWhile (== ' ') arg
         axiomNum = case readMaybe axiomString of
                     Just num -> num
                     Nothing  -> 0
-        showAxiom n (name, formBinding, termBinding) = "  " ++ show n ++ ". " ++ name ++ " with " ++ showFormulaAssignment formBinding
+        showAxiom n (name, formBinding, termBinding) = "  " ++ show n ++ ". " ++ name ++ " with " ++ ppFormulaAssignment formBinding
         showAxioms n [] = []
         showAxioms n (x:xs) = showAxiom n x : showAxioms (n+1) xs
-        showFormulaAssignment bindings = intercalate ", " (map showBinding bindings)
-        showBinding (var, [f]) = var ++ " := " ++ show f
-        showBinding (var, fs)  = var ++ " := [" ++ intercalate "," (map show fs) ++ "]"
+        ppFormulaAssignment bindings = intercalate ", " (map showBinding bindings)
+        showBinding (var, [f]) = var ++ " := " ++ ppFormula (unicode env) f
+        showBinding (var, fs)  = var ++ " := [" ++ ppFormulaList (unicode env) fs ++ "]"
 
 printProofTree :: Env -> String -> IO Env
 printProofTree env _ =
   case (pretty env) of
-    True -> do putStr $ ppDerivationTree (goal env) (subgoal env)
+    True -> do putStr $ ppDerivationTree (unicode env) (goal env) (subgoal env)
                return env
-    _    -> do putStr $ ppDerivation (goal env)
+    _    -> do putStr $ ppDerivation (unicode env) (goal env)
                return env
 
 togglePretty :: Env -> String -> IO Env
@@ -331,10 +362,18 @@ togglePretty env _ =
     _     -> do putStrLn "Enabling pretty printing."
                 return env { pretty = True }
 
+toggleUnicode :: Env -> String -> IO Env
+toggleUnicode env _ =
+  case (unicode env) of
+    True  -> do putStrLn "Disabling unicode."
+                return env { unicode = False }
+    _     -> do putStrLn "Enabling unicode."
+                return env { unicode = True }
+
 changeCalculus :: Env -> String -> IO Env
 changeCalculus env arg =
   if null calcName
-  then do print $ calculus env
+  then do putStrLn $ ppCalculus (unicode env) $ calculus env
           return env
   else 
     case find (\calc -> name calc == calcName) calculi of
@@ -348,17 +387,13 @@ changeCalculus env arg =
 listRule :: Env -> String -> IO Env
 listRule env arg =
   case (lookup ruleStr $ axioms (calculus env), lookup ruleStr $ rules (calculus env)) of
-    (Just axiomPat,_) -> do putStrLn (show axiomPat ++ " (" ++ ruleStr ++ ")")
+    (Just axiomPat,_) -> do putStrLn (ppSequentPat (unicode env) axiomPat ++ " (" ++ ruleStr ++ ")")
                             return env
-    (_,Just rulePat)  -> do putStrLn (ppRulePat "" (ruleStr, rulePat))
+    (_,Just rulePat)  -> do putStrLn (ppRulePat (unicode env) "" (ruleStr, rulePat))
                             return env
     _                 -> do putStrLn $ "Couldn't find axiom/rule " ++ ruleStr
                             return env
   where ruleStr = dropWhile (==' ') arg
-
-showCalculus :: Env -> String -> IO Env
-showCalculus env _ = do print $ calculus env
-                        return env
 
 listCalculi :: Env -> String -> IO Env
 listCalculi env _ = do mapM_ (\calc -> putStrLn $ name calc) calculi
@@ -396,4 +431,5 @@ main = do
              , calculus = head calculi
              , quitFlag = False
              , pretty = True
+             , unicode = True
              }

@@ -27,8 +27,6 @@ module Calculus
   , FormulaAssignment
   , TermAssignment
   , Calculus(..)
-  , showFormulaInst
-  , showSequentInst
   , instFormulaPat
   , instSequentPat
   
@@ -44,6 +42,7 @@ module Calculus
   , conclusion
   , stubs
   , getGoal
+  , clearSubgoal
   , applicableAxioms
   , applicableRules
   , applyAxiom
@@ -53,8 +52,16 @@ module Calculus
 --  , checkDerivation
   
   -- * Pretty printing
+  , ppFormula
+  , ppFormulaList
+  , ppSequent
+  , ppFormulaPat
+  , ppSequentPat
+  , ppFormulaInst
+  , ppSequentInst
   , ppRulePat
   , ppGoalSpec
+  , ppCalculus
   , ppDerivation
   , ppDerivationTree
   ) where
@@ -83,11 +90,13 @@ data Formula = Bottom
 --------------------------------------------------------------------------------
 -- substitutions
 
+-- | All the variables in a term.
 termVars :: Term -> [String]
 termVars (ConstTerm  _) = []
 termVars (VarTerm    v) = [v]
 termVars (AppTerm _ ts) = [ v | t <- ts, v <- termVars t ]
 
+-- | All the free variables in a formula.
 freeVars :: Formula -> [String]
 freeVars = nub . freeVars' where
   freeVars' Bottom = []
@@ -98,21 +107,23 @@ freeVars = nub . freeVars' where
   freeVars' (Forall  x f) = [ v | v <- freeVars' f, v /= x ]
   freeVars' (Exists  x f) = [ v | v <- freeVars' f, v /= x ]
 
+-- | Substitute a variable for a term inside a larger term.
 substTerm :: String -> Term -> Term -> Term
 substTerm x t (VarTerm    v) | x == v = t
 substTerm x t (AppTerm f ts) = AppTerm f $ map (substTerm x t) ts
 substTerm _ _ term = term
 
+-- | Substitute a variable for a term inside a formula.
 substFormula :: String -> Term -> Formula -> Formula
-substFormula _ _ Bottom = Bottom
-substFormula x t (Pred p ts) = Pred p $ map (substTerm x t) ts
-substFormula x t (And     f g) = And     (substFormula x t f) (substFormula x t g)
-substFormula x t (Or      f g) = Or      (substFormula x t f) (substFormula x t g)
-substFormula x t (Implies f g) = Implies (substFormula x t f) (substFormula x t g)
-substFormula x t (Forall y f) | x == y    = Forall y f
-                              | otherwise = Forall y (substFormula x t f)
-substFormula x t (Exists y f) | x == y    = Exists y f
-                              | otherwise = Exists y (substFormula x t f)
+substFormula _ _ Bottom         = Bottom
+substFormula x t (Pred    p ts) = Pred p $ map (substTerm x t) ts
+substFormula x t (And     f g)  = And     (substFormula x t f) (substFormula x t g)
+substFormula x t (Or      f g)  = Or      (substFormula x t f) (substFormula x t g)
+substFormula x t (Implies f g)  = Implies (substFormula x t f) (substFormula x t g)
+substFormula x t (Forall  y f)  | x == y    = Forall y f
+                                | otherwise = Forall y (substFormula x t f)
+substFormula x t (Exists  y f)  | x == y    = Exists y f
+                                | otherwise = Exists y (substFormula x t f)
 
 --------------------------------------------------------------------------------
 -- | Represents a sequent in a Gentzen-style derivation. Logically, a sequent of the
@@ -179,54 +190,8 @@ type FormulaAssignment = [(String, [Formula])]
 -- | Map from variable names to concrete terms.
 type TermAssignment = [(String, Term)]
 
-instFormulaPat :: FormulaAssignment -> TermAssignment -> FormulaPat -> Maybe [Formula]
-instFormulaPat _            _ BottomPat   = return [Bottom]
-instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
-instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
-instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
-instFormulaPat formBindings termBindings (AndPat s t) = do
-  sB <- instFormulaPat formBindings termBindings s
-  tB <- instFormulaPat formBindings termBindings t
-  return [And a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (OrPat s t) = do
-  sB <- instFormulaPat formBindings termBindings s
-  tB <- instFormulaPat formBindings termBindings t
-  return [Or a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (ImpliesPat s t) = do
-  sB <- instFormulaPat formBindings termBindings s
-  tB <- instFormulaPat formBindings termBindings t
-  return [Implies a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (ForallPat x s) = do
-  -- TODO: check that this doesn't blow up if x doesn't map to a variable
-  VarTerm y <- lookup x termBindings
-  sB <- instFormulaPat formBindings termBindings s
-  return [Forall y a | a <- sB]
-instFormulaPat formBindings termBindings (ExistsPat x s) = do
-  VarTerm y <- lookup x termBindings
-  sB <- instFormulaPat formBindings termBindings s
-  return [Exists y a | a <- sB]
-instFormulaPat formBindings termBindings (SubstPat x t s) = do
-  VarTerm y <- lookup x termBindings
-  let tId = termPatId t
-  tB    <- lookup tId termBindings
-  sB    <- lookup s formBindings
-  return [ substFormula y tB a | a <- sB]
-instFormulaPat formBindings termBindings (NoFreePat x s) = do
-  VarTerm y <- lookup x termBindings
-  sB    <- instFormulaPat formBindings termBindings s
-  case y `elem` concat (map freeVars sB) of
-    True -> Nothing
-    False -> return sB
---  return [ a | a <- sB, not (y `elem` freeVars a) ]
-
-instSequentPat :: FormulaAssignment -> TermAssignment -> SequentPat -> Maybe Sequent
-instSequentPat formBindings termBindings (ants ::=> sucs) = do
-  antsInsts <- sequence (map (instFormulaPat formBindings termBindings) ants)
-  sucsInsts <- sequence (map (instFormulaPat formBindings termBindings) sucs)
-  return $ concat antsInsts :=> concat sucsInsts
-
--- given an assignment and a formula pattern, return a list of all the patterns in
--- the formula that are unbound.
+-- | Given an assignment and a formula pattern, return a list of all the patterns in
+-- the formula that are unbound. Use this in conjunction with instFormulaPat.
 tryFormula :: FormulaAssignment -> TermAssignment -> FormulaPat -> ([FormulaPat], [TermPat])
 tryFormula _ _ BottomPat = ([], [])
 tryFormula formBindings termBindings (PredPat p) =
@@ -276,6 +241,66 @@ tryFormula formBindings termBindings (NoFreePat x s) = (sForms, xTerms ++ sTerms
     Nothing -> [VarPat x]
     Just _ -> []
 
+-- | Given /complete/ formula and term assignments, and a formula pattern attempt to
+-- instantiate the pattern. This function should not be invoked on incomplete
+-- assignments. By complete, we mean that every schematic variable on the formula and
+-- term levels should have corresponding bindings in the first arguments provided for
+-- this function.
+instFormulaPat :: FormulaAssignment -> TermAssignment -> FormulaPat -> Maybe [Formula]
+instFormulaPat _            _ BottomPat   = return [Bottom]
+instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
+instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
+instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
+instFormulaPat formBindings termBindings (AndPat s t) = do
+  sB <- instFormulaPat formBindings termBindings s
+  tB <- instFormulaPat formBindings termBindings t
+  return [And a b | a <- sB, b <- tB]
+instFormulaPat formBindings termBindings (OrPat s t) = do
+  sB <- instFormulaPat formBindings termBindings s
+  tB <- instFormulaPat formBindings termBindings t
+  return [Or a b | a <- sB, b <- tB]
+instFormulaPat formBindings termBindings (ImpliesPat s t) = do
+  sB <- instFormulaPat formBindings termBindings s
+  tB <- instFormulaPat formBindings termBindings t
+  return [Implies a b | a <- sB, b <- tB]
+instFormulaPat formBindings termBindings (ForallPat x s) = do
+  -- TODO: check that this doesn't blow up if x doesn't map to a variable
+  VarTerm y <- lookup x termBindings
+  sB <- instFormulaPat formBindings termBindings s
+  return [Forall y a | a <- sB]
+instFormulaPat formBindings termBindings (ExistsPat x s) = do
+  VarTerm y <- lookup x termBindings
+  sB <- instFormulaPat formBindings termBindings s
+  return [Exists y a | a <- sB]
+instFormulaPat formBindings termBindings (SubstPat x t s) = do
+  VarTerm y <- lookup x termBindings
+  let tId = termPatId t
+  tB    <- lookup tId termBindings
+  sB    <- lookup s formBindings
+  return [ substFormula y tB a | a <- sB]
+instFormulaPat formBindings termBindings (NoFreePat x s) = do
+  VarTerm y <- lookup x termBindings
+  sB    <- instFormulaPat formBindings termBindings s
+  case y `elem` concat (map freeVars sB) of
+    True -> Nothing
+    False -> return sB
+
+-- TODO: removed a nub from the front of below, should be safe since there is a nub
+-- in front of all uses of this function anyway.
+-- | Same as tryFormula, but for SequentPats.
+trySequent :: FormulaAssignment -> TermAssignment -> SequentPat -> ([FormulaPat], [TermPat])
+trySequent formBindings termBindings (ants ::=> sucs) =
+  tryFormulas' formBindings termBindings ants `appendPair` tryFormulas' formBindings termBindings sucs
+  where tryFormulas' formBindings termBindings pats = concatPairs $ map (tryFormula formBindings termBindings) pats
+
+-- | Same as instFormulaPat, but for SequentPats.
+instSequentPat :: FormulaAssignment -> TermAssignment -> SequentPat -> Maybe Sequent
+instSequentPat formBindings termBindings (ants ::=> sucs) = do
+  antsInsts <- sequence (map (instFormulaPat formBindings termBindings) ants)
+  sucsInsts <- sequence (map (instFormulaPat formBindings termBindings) sucs)
+  return $ concat antsInsts :=> concat sucsInsts
+
+-- TODO: put these functions in Utils.hs
 appendPair :: ([a],[b]) -> ([a],[b]) -> ([a],[b])
 appendPair (xs, ys) (xs', ys') = (xs ++ xs', ys ++ ys')
 
@@ -285,17 +310,8 @@ concatPairs = foldl appendPair ([],[])
 nubPair :: (Eq a, Eq b) => ([a],[b]) -> ([a],[b])
 nubPair (xs, ys) = (nub xs, nub ys)
 
--- TODO: removed a nub from the front of below, should be safe since there is a nub
--- in front of all uses of this function anyway.
-trySequent :: FormulaAssignment -> TermAssignment -> SequentPat -> ([FormulaPat], [TermPat])
-trySequent formBindings termBindings (ants ::=> sucs) =
-  tryFormulas' formBindings termBindings ants `appendPair` tryFormulas' formBindings termBindings sucs
-  where tryFormulas' formBindings termBindings pats = concatPairs $ map (tryFormula formBindings termBindings) pats
-
 --------------------------------------------------------------------------------
 -- Matching patterns
-
--- (i-am-here)
 
 -- | powerset of a list, viewed as a multiset.
 powerset :: [a] -> [[a]]
@@ -327,33 +343,18 @@ mergeTermAssignments [] = return []
 -- | Take a list of patterns and a list of formulas to match, and produce a list
 -- of all satisfying assignments.
 match :: [FormulaPat] -> [Formula] -> [(FormulaAssignment,TermAssignment)]
---match :: [FormulaPat] -> [Formula] -> [FormulaAssignment]
 match (BottomPat:pats) fs =
   [matchRest | Bottom    <- nub fs
              , fs'       <- [delete Bottom fs]
              , matchRest <- match pats fs']
--- match ((PredPat p):pats) fs =
---   [merge | Pred p' ts <- nub fs
---          , matchForms <- match pats (delete (Pred p' ts) fs)
---          , merge <- mergeFormulaAssignments [[(p, [Pred p' ts])], matchForms]]
 match ((PredPat p):pats) fs =
   [(merge, matchTerms) | Pred p' ts <- nub fs
                        , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
                        , merge <- mergeFormulaAssignments [[(p, [Pred p' ts])], matchForms]]
--- match ((FormPat n):pats) fs =
---   [merge | y          <- nub fs
---          , assignRest <- match pats (delete y fs)
---          , merge      <- mergeFormulaAssignments [[(n,[y])], assignRest]]
 match ((FormPat n):pats) fs =
   [(mergeForms, matchTerms) | y <- nub fs
                             , (matchForms, matchTerms) <- match pats (delete y fs)
                             , mergeForms <- mergeFormulaAssignments [[(n,[y])], matchForms]]
--- match ((AndPat pat1 pat2):pats) fs =
---   [merge | And c1 c2  <- nub fs
---          , matchc1    <- match [pat1] [c1]
---          , matchc2    <- match [pat2] [c2]
---          , assignRest <- match pats (delete (And c1 c2) fs)
---          , merge      <- mergeFormulaAssignments [matchc1, matchc2, assignRest]]
 match ((AndPat pat1 pat2):pats) fs =
   [(mergeForms, matchTerms) | And c1 c2 <- nub fs
                             , (c1Forms, c1Terms) <- match [pat1] [c1]
@@ -375,10 +376,6 @@ match ((ImpliesPat pat1 pat2):pats) fs =
                             , (matchForms, matchTerms) <- match pats (delete (Implies c1 c2) fs)
                             , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
                             , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
--- match ((SetPat s):pats) fs =
---   [merge | fs'        <- nub $ powerset fs
---          , assignRest <- match pats (fs \\ fs')
---          , merge      <- mergeFormulaAssignments [[(s,fs')], assignRest]]
 match ((SetPat s):pats) fs =
   [(mergeForms, matchTerms) | fs' <- nub $ powerset fs
                             , (matchForms, matchTerms) <- match pats (fs \\ fs')
@@ -562,7 +559,8 @@ tryAxiom calculus name formBindings termBindings = case pat of
 -- | Given a 'Calculus', a rule name, an assignment for the rule, a 'GoalSpec'
 -- (pointer to a particular node in the derivation tree), and a 'Derivation', return
 -- a new derivation consisting of the old one with the given node replaced with a
--- rule application. Fails if the node doesn't exist.
+-- rule application. Fails if the node doesn't exist, or if instantation (via
+-- instSequentPat) fails.
 applyRule :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
 applyRule calculus name formBindings termBindings [] der = do
   (prems, conc) <- lookup name (rules calculus)
@@ -582,6 +580,15 @@ tryRule calculus name formBindings termBindings = case pat of
   Just (prems, conc) ->
     nubPair $ trySequent formBindings termBindings conc `appendPair` concatPairs (map (trySequent formBindings termBindings) prems)
   where pat = lookup name (rules calculus)
+
+clearSubgoal :: GoalSpec -> Derivation -> Maybe Derivation
+clearSubgoal [] (Stub seq)    = return $ Stub seq
+clearSubgoal [] (Axiom seq _) = return $ Stub seq
+clearSubgoal [] (Der seq _ _) = return $ Stub seq
+clearSubgoal (i:is) (Der seq rule ders) = do
+  der    <- ders !!! (i-1)
+  newDer <- clearSubgoal is der
+  return $ Der seq rule (setElt (i-1) newDer ders)
 
 -- TODO: fix this
 -- | Given a "Calculus" and a "Derivation", check that the derivation is valid.
@@ -611,158 +618,218 @@ tryRule calculus name formBindings termBindings = case pat of
 -- checkDerivation _ d = Left d -- rule not found
 
 --------------------------------------------------------------------------------
--- show instances
+-- pretty printing
 
 instance Show Term where
   show (ConstTerm  c) = "_" ++ c
   show (VarTerm    v) = v
   show (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map show ts) ++ ")"
 
--- TODO: clean all this shit up somehow
+-- | Pretty print a formula, with top level parentheses.
+ppFormula' :: Bool -> Formula -> String
+ppFormula' True  Bottom        = "⊥"
+ppFormula' False Bottom        = "_|_"
+ppFormula' unicode (Pred p [])   = p
+ppFormula' unicode (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
+ppFormula' True (And (Implies a b) (Implies b' a'))
+  | a == a', b == b'       = "(" ++ ppFormula' True a ++ " ↔ " ++ ppFormula' True b ++ ")"
+ppFormula' False (And (Implies a b) (Implies b' a'))
+  | a == a', b == b'       = "(" ++ ppFormula' False a ++ " <-> " ++ ppFormula' False b ++ ")"
+ppFormula' unicode (And a b)     = "(" ++ ppFormula' unicode a ++ " & "   ++ ppFormula' unicode b ++ ")"
+ppFormula' True    (Or a b)      = "(" ++ ppFormula' True a ++ " ∨ "   ++ ppFormula' True b ++ ")"
+ppFormula' False   (Or a b)      = "(" ++ ppFormula' False a ++ " | "   ++ ppFormula' False b ++ ")"
+ppFormula' True    (Implies a Bottom) = "¬" ++ ppFormula' True a
+ppFormula' False   (Implies a Bottom) = "~" ++ ppFormula' False a
+ppFormula' True    (Implies a b) = "(" ++ ppFormula' True a ++ " ⊃ "  ++ ppFormula' True b ++ ")"
+ppFormula' False   (Implies a b) = "(" ++ ppFormula' False a ++ " -> "  ++ ppFormula' False b ++ ")"
+ppFormula' True    (Forall x a) = "∀" ++ x ++ "." ++ ppFormula' True a
+ppFormula' False   (Forall x a) = "forall " ++ x ++ "." ++ ppFormula' False a
+ppFormula' True    (Exists x a) = "∃" ++ x ++ "." ++ ppFormula' True a
+ppFormula' False   (Exists x a) = "exists " ++ x ++ "." ++ ppFormula' False a
 
-showFormula' Bottom        = "_|_"
-showFormula' (Pred p [])   = p
-showFormula' (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
-showFormula' (And (Implies a b) (Implies b' a'))
-  | a == a', b == b'       = "(" ++ showFormula' a ++ " <-> " ++ showFormula' b ++ ")"
-showFormula' (And a b)     = "(" ++ showFormula' a ++ " & "   ++ showFormula' b ++ ")"
-showFormula' (Or a b)      = "(" ++ showFormula' a ++ " | "   ++ showFormula' b ++ ")"
-showFormula' (Implies a Bottom)
-                           = "~" ++ showFormula' a
-showFormula' (Implies a b) = "(" ++ showFormula' a ++ " -> "  ++ showFormula' b ++ ")"
-showFormula' (Forall x a) = "∀" ++ x ++ showFormula' a
-showFormula' (Exists x a) = "∃" ++ x ++ showFormula' a
+-- | Pretty print a formula, omitting top level parentheses.
+ppFormula :: Bool -> Formula -> String
+ppFormula True (And (Implies a b) (Implies b' a'))
+  | a == a', b == b'     = ppFormula' True a ++ " ↔ " ++ ppFormula' True b
+ppFormula False (And (Implies a b) (Implies b' a'))
+  | a == a', b == b'     = ppFormula' False a ++ " <-> " ++ ppFormula' False b
+ppFormula unicode (And a b)          = ppFormula' unicode a ++ " & " ++ ppFormula' unicode b
+ppFormula True    (Or a b)           = ppFormula' True a ++ " ∨ " ++ ppFormula' True b
+ppFormula False   (Or a b)           = ppFormula' False a ++ " | " ++ ppFormula' False b
+ppFormula True    (Implies a Bottom) = "¬" ++ ppFormula' True a
+ppFormula False   (Implies a Bottom) = "~" ++ ppFormula' False a
+ppFormula True    (Implies a b)      = ppFormula' True a ++ " ⊃ " ++ ppFormula' True b
+ppFormula False   (Implies a b)      = ppFormula' False a ++ " -> " ++ ppFormula' False b
+ppFormula unicode formula            = ppFormula' unicode formula
 
-showFormula (And (Implies a b) (Implies b' a'))
-  | a == a', b == b'     = showFormula' a ++ " <-> " ++ showFormula' b
-showFormula (And a b)          = showFormula' a ++ " & " ++ showFormula' b
-showFormula (Or a b)           = showFormula' a ++ " | " ++ showFormula' b
-showFormula (Implies a Bottom) = "~" ++ showFormula' a
-showFormula (Implies a b)      = showFormula' a ++ " -> " ++ showFormula' b
-showFormula formula            = showFormula' formula
+-- | Pretty print a list of formulas.
+ppFormulaList :: Bool -> [Formula] -> String
+ppFormulaList unicode = intercalate ", " . map (ppFormula unicode)
 
-instance Show Formula where
-  show = showFormula
-
-instance Show Sequent where
-  show (ants :=> sucs) = intercalate ", " (map show ants) ++ " => " ++
-                         intercalate ", " (map show sucs)
+-- | Pretty print a sequent.
+ppSequent :: Bool -> Sequent -> String
+ppSequent True  (ants :=> sucs) = intercalate ", " (map (ppFormula True)  ants) ++ " ⇒ " ++
+                                  intercalate ", " (map (ppFormula True)  sucs)
+ppSequent False (ants :=> sucs) = intercalate ", " (map (ppFormula False) ants) ++ " => " ++
+                                  intercalate ", " (map (ppFormula False) sucs)
 
 -- TODO: g3i, top => ~exists x.P(x) -> forall x.~P(x) leads to a presentation of ~ as
 -- -> _|_.
-showFormulaPat' (PredPat p) = p
-showFormulaPat' (FormPat a) = a
-showFormulaPat' (SetPat gamma) = gamma
-showFormulaPat' (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
-  | s == s' && t == t' = "(" ++ showFormulaPat' s ++ " <-> " ++ showFormulaPat' t ++ ")"
-showFormulaPat' (AndPat     s t) = "(" ++ showFormulaPat' s ++ " & "  ++ showFormulaPat' t ++ ")"
-showFormulaPat' (OrPat      s t) = "(" ++ showFormulaPat' s ++ " | "  ++ showFormulaPat' t ++ ")"
-showFormulaPat' (ImpliesPat s BottomPat) = "~" ++ showFormulaPat' s
-showFormulaPat' (ImpliesPat s t) = "(" ++ showFormulaPat' s ++ " -> " ++ showFormulaPat' t ++ ")"
-showFormulaPat' (ForallPat x s) = "∀" ++ x ++ "(" ++ showFormulaPat' s ++ ")"
-showFormulaPat' (ExistsPat x s) = "∃" ++ x ++ "(" ++ showFormulaPat' s ++ ")"
-showFormulaPat' (SubstPat x t a) = a ++ "(" ++ termPatId t ++ "/" ++ x ++ ")"
-showFormulaPat' (NoFreePat x s) = showFormulaPat' s ++ "[no free " ++ x ++ "]"
-showFormulaPat' (BottomPat) = "_|_"
 
-showFormulaPat (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
-  | s == s' && t == t' = showFormulaPat' s ++ " <-> " ++ showFormulaPat' t
-showFormulaPat (AndPat     s t) = showFormulaPat' s ++ " & "  ++ showFormulaPat' t
-showFormulaPat (OrPat      s t) = showFormulaPat' s ++ " | "  ++ showFormulaPat' t
-showFormulaPat (ImpliesPat s BottomPat) = "~" ++ showFormulaPat' s
-showFormulaPat (ImpliesPat s t) = showFormulaPat' s ++ " -> " ++ showFormulaPat' t
-showFormulaPat f = showFormulaPat' f
+-- | Pretty print a formula pattern, with top level parentheses.
+ppFormulaPat' :: Bool -> FormulaPat -> String
+ppFormulaPat' unicode (PredPat p) = p
+ppFormulaPat' unicode (FormPat a) = a
+ppFormulaPat' unicode (SetPat gamma) = gamma
+ppFormulaPat' True (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' = "(" ++ ppFormulaPat' True s ++ " ↔ " ++ ppFormulaPat' True t ++ ")"
+ppFormulaPat' False (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' = "(" ++ ppFormulaPat' False s ++ " <-> " ++ ppFormulaPat' False t ++ ")"
+ppFormulaPat' unicode (AndPat     s t) = "(" ++ ppFormulaPat' unicode s ++ " & "  ++ ppFormulaPat' unicode t ++ ")"
+ppFormulaPat' True    (OrPat      s t) = "(" ++ ppFormulaPat' True s ++ " ∨ "  ++ ppFormulaPat' True t ++ ")"
+ppFormulaPat' False   (OrPat      s t) = "(" ++ ppFormulaPat' False s ++ " | "  ++ ppFormulaPat' False t ++ ")"
+ppFormulaPat' True    (ImpliesPat s BottomPat) = "¬" ++ ppFormulaPat' True s
+ppFormulaPat' False   (ImpliesPat s BottomPat) = "~" ++ ppFormulaPat' False s
+ppFormulaPat' True    (ImpliesPat s t) = "(" ++ ppFormulaPat' True  s ++ " ⊃ "  ++ ppFormulaPat' True  t ++ ")"
+ppFormulaPat' False   (ImpliesPat s t) = "(" ++ ppFormulaPat' False s ++ " -> " ++ ppFormulaPat' False t ++ ")"
+ppFormulaPat' True    (ForallPat x s) = "∀"       ++ x ++ ".(" ++ ppFormulaPat' True  s ++ ")"
+ppFormulaPat' False   (ForallPat x s) = "forall " ++ x ++ ".(" ++ ppFormulaPat' False s ++ ")"
+ppFormulaPat' True    (ExistsPat x s) = "∃"       ++ x ++ ".(" ++ ppFormulaPat' True  s ++ ")"
+ppFormulaPat' False   (ExistsPat x s) = "exists " ++ x ++ ".(" ++ ppFormulaPat' False s ++ ")"
+ppFormulaPat' unicode (SubstPat x t a) = a ++ "(" ++ termPatId t ++ "/" ++ x ++ ")"
+ppFormulaPat' unicode (NoFreePat x s) = ppFormulaPat' unicode s ++ "[no free " ++ x ++ "]"
+ppFormulaPat' True    (BottomPat) = "⊥"
+ppFormulaPat' False   (BottomPat) = "_|_"
 
-instance Show FormulaPat where
-  show = showFormulaPat
+-- | Pretty print a formula pattern, omitting top level parentheses.
+ppFormulaPat :: Bool -> FormulaPat -> String
+ppFormulaPat True (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' = ppFormulaPat' True s ++ " ↔ " ++ ppFormulaPat' True t
+ppFormulaPat False (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' = ppFormulaPat' False s ++ " <-> " ++ ppFormulaPat' False t
+ppFormulaPat unicode (AndPat     s t) = ppFormulaPat' unicode s ++ " & "  ++ ppFormulaPat' unicode t
+ppFormulaPat True    (OrPat      s t) = ppFormulaPat' True    s ++ " ∨ "  ++ ppFormulaPat' True    t
+ppFormulaPat False   (OrPat      s t) = ppFormulaPat' False   s ++ " | "  ++ ppFormulaPat' False   t
+ppFormulaPat True    (ImpliesPat s BottomPat) = "¬" ++ ppFormulaPat' True  s
+ppFormulaPat False   (ImpliesPat s BottomPat) = "~" ++ ppFormulaPat' False s
+ppFormulaPat True    (ImpliesPat s t) = ppFormulaPat' True  s ++ " ⊃ "  ++ ppFormulaPat' True  t
+ppFormulaPat False   (ImpliesPat s t) = ppFormulaPat' False s ++ " -> " ++ ppFormulaPat' False t
+ppFormulaPat unicode f = ppFormulaPat' unicode f
 
-showFormulaInst' :: FormulaAssignment -> TermAssignment -> FormulaPat -> String
-showFormulaInst' formBindings termBindings (PredPat p) = case lookup p formBindings of
-  Nothing  -> "[[" ++ p ++ "]]" -- p is unbound
-  Just [f] -> showFormula' f
-  Just fs  -> error $ "atom variable " ++ p ++ " bound to " ++ show fs
-showFormulaInst' formBindings termBindings (FormPat a) = case lookup a formBindings of
-  Nothing  -> "[[" ++ a ++ "]]"
-  Just [f] -> showFormula' f
-  -- use showFormula' instead of show to ensure it gets parenthesized
-  Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ show fs
-showFormulaInst' formBindings termBindings (SetPat g) = case lookup g formBindings of
-  Nothing -> "[[" ++ g ++ "]]"
-  Just fs -> intercalate ", " (map show fs) -- show the formulas
-showFormulaInst' formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+ppFormulaInst' :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
+ppFormulaInst' unicode formBindings termBindings (PredPat p) = case lookup p formBindings of
+  Nothing  -> "<" ++ p ++ ">" -- p is unbound
+  Just [f] -> ppFormula' unicode f
+  Just fs  -> error $ "atom variable " ++ p ++ " bound to " ++ ppFormulaList unicode fs
+ppFormulaInst' unicode formBindings termBindings (FormPat a) = case lookup a formBindings of
+  Nothing  -> "<" ++ a ++ ">"
+  Just [f] -> ppFormula' unicode f
+  Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ ppFormulaList unicode fs
+ppFormulaInst' unicode formBindings termBindings (SetPat g) = case lookup g formBindings of
+  Nothing -> "<" ++ g ++ ">"
+  Just fs -> ppFormulaList unicode fs -- show the formulas
+ppFormulaInst' True formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
   | s == s' && t == t' =
-    "(" ++ showFormulaInst' formBindings termBindings s ++ " <-> " ++ showFormulaInst' formBindings termBindings t ++ ")"
-showFormulaInst' formBindings termBindings (AndPat s t) =
-  "(" ++ showFormulaInst' formBindings termBindings s ++ " & " ++ showFormulaInst' formBindings termBindings t ++ ")"
-showFormulaInst' formBindings termBindings (OrPat s t) =
-  "(" ++ showFormulaInst' formBindings termBindings s ++ " | " ++ showFormulaInst' formBindings termBindings t ++ ")"
-showFormulaInst' formBindings termBindings (ImpliesPat s BottomPat) = "~" ++ showFormulaInst' formBindings termBindings s
-showFormulaInst' formBindings termBindings (ImpliesPat s t) =
-  "(" ++ showFormulaInst' formBindings termBindings s ++ " -> " ++ showFormulaInst' formBindings termBindings t ++ ")"
-showFormulaInst' formBindings termBindings BottomPat = "_|_"
-showFormulaInst' formBindings termBindings (ForallPat x s) =
+    "(" ++ ppFormulaInst' True formBindings termBindings s ++ " ↔ " ++ ppFormulaInst' True formBindings termBindings t ++ ")"
+ppFormulaInst' False formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' =
+    "(" ++ ppFormulaInst' False formBindings termBindings s ++ " <-> " ++ ppFormulaInst' False formBindings termBindings t ++ ")"
+ppFormulaInst' unicode formBindings termBindings (AndPat s t) =
+  "(" ++ ppFormulaInst' unicode formBindings termBindings s ++ " & " ++ ppFormulaInst' unicode formBindings termBindings t ++ ")"
+ppFormulaInst' True formBindings termBindings (OrPat s t) =
+  "(" ++ ppFormulaInst' True formBindings termBindings s ++ " ∨ " ++ ppFormulaInst' True formBindings termBindings t ++ ")"
+ppFormulaInst' False formBindings termBindings (OrPat s t) =
+  "(" ++ ppFormulaInst' False formBindings termBindings s ++ " | " ++ ppFormulaInst' False formBindings termBindings t ++ ")"
+ppFormulaInst' True  formBindings termBindings (ImpliesPat s BottomPat) = "¬" ++ ppFormulaInst' True formBindings termBindings s
+ppFormulaInst' False formBindings termBindings (ImpliesPat s BottomPat) = "~" ++ ppFormulaInst' False formBindings termBindings s
+ppFormulaInst' True formBindings termBindings (ImpliesPat s t) =
+  "(" ++ ppFormulaInst' True formBindings termBindings s ++ " ⊃ " ++ ppFormulaInst' True formBindings termBindings t ++ ")"
+ppFormulaInst' False formBindings termBindings (ImpliesPat s t) =
+  "(" ++ ppFormulaInst' False formBindings termBindings s ++ " -> " ++ ppFormulaInst' False formBindings termBindings t ++ ")"
+ppFormulaInst' True  formBindings termBindings BottomPat = "⊥"
+ppFormulaInst' False formBindings termBindings BottomPat = "_|_"
+ppFormulaInst' True formBindings termBindings (ForallPat x s) =
   case lookup x termBindings of
-    Nothing -> "∀[[" ++  x ++ "]]." ++ showFormulaInst' formBindings termBindings s
-    Just (VarTerm y) -> "∀" ++ y ++ "." ++ showFormulaInst' formBindings termBindings s
-showFormulaInst' formBindings termBindings (ExistsPat x s) =
+    Nothing -> "∀<" ++  x ++ ">." ++ ppFormulaInst' True formBindings termBindings s
+    Just (VarTerm y) -> "∀" ++ y ++ "." ++ ppFormulaInst' True formBindings termBindings s
+ppFormulaInst' False formBindings termBindings (ForallPat x s) =
   case lookup x termBindings of
-    Nothing -> "∃[[" ++  x ++ "]]." ++ showFormulaInst' formBindings termBindings s
-    Just (VarTerm y) -> "∃" ++ y ++ "." ++ showFormulaInst' formBindings termBindings s
-showFormulaInst' formBindings termBindings (SubstPat x t s) =
+    Nothing -> "forall <" ++  x ++ ">." ++ ppFormulaInst' False formBindings termBindings s
+    Just (VarTerm y) -> "forall " ++ y ++ "." ++ ppFormulaInst' False formBindings termBindings s
+ppFormulaInst' True formBindings termBindings (ExistsPat x s) =
+  case lookup x termBindings of
+    Nothing -> "∃<" ++  x ++ ">." ++ ppFormulaInst' True formBindings termBindings s
+    Just (VarTerm y) -> "∃" ++ y ++ "." ++ ppFormulaInst' True formBindings termBindings s
+ppFormulaInst' False formBindings termBindings (ExistsPat x s) =
+  case lookup x termBindings of
+    Nothing -> "exists <" ++  x ++ ">." ++ ppFormulaInst' False formBindings termBindings s
+    Just (VarTerm y) -> "exists" ++ y ++ "." ++ ppFormulaInst' False formBindings termBindings s
+ppFormulaInst' unicode formBindings termBindings (SubstPat x t s) =
   let xStr = case lookup x termBindings of
-               Nothing -> "[[" ++ x ++ "]]"
+               Nothing -> "<" ++ x ++ ">"
                Just (VarTerm y) -> y
       tStr = case lookup (termPatId t) termBindings of
-               Nothing -> "[[" ++ termPatId t ++ "]]"
+               Nothing -> "<" ++ termPatId t ++ ">"
                Just t' -> show t'
       sStr = case lookup s formBindings of
-               Nothing -> "[[" ++ s ++ "]]"
-               Just s' -> show s'
+               Nothing -> "<" ++ s ++ ">"
+               Just s' -> ppFormulaList unicode s'
   in sStr ++ "(" ++ tStr ++ "/" ++ xStr ++ ")"
-showFormulaInst' formBindings termBindings (NoFreePat x s) =
+ppFormulaInst' unicode formBindings termBindings (NoFreePat x s) =
   case lookup x termBindings of
-    Nothing -> showFormulaInst' formBindings termBindings s ++ "[no free [[" ++ x ++ "]] ]"
-    Just (VarTerm y) -> showFormulaInst' formBindings termBindings s ++ "[no free " ++ y ++ "]"
+    Nothing -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free <" ++ x ++ "> ]"
+    Just (VarTerm y) -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free " ++ y ++ "]"
   
 -- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
 -- instantiation. 
-showFormulaInst :: FormulaAssignment -> TermAssignment -> FormulaPat -> String
-showFormulaInst formBindings termBindings (FormPat a) = case lookup a formBindings of
-  Nothing -> "[[" ++ a ++ "]]"
-  Just [f] -> show f
-  Just fs -> error $ "var variable " ++ a ++ " bound to " ++ show fs
-showFormulaInst formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+ppFormulaInst :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
+ppFormulaInst unicode formBindings termBindings (FormPat a) = case lookup a formBindings of
+  Nothing -> "<" ++ a ++ ">"
+  Just [f] -> ppFormula unicode f
+  Just fs -> error $ "var variable " ++ a ++ " bound to " ++ ppFormulaList unicode fs
+ppFormulaInst True formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
   | s == s' && t == t' =
-    showFormulaInst' formBindings termBindings s ++ " <-> " ++ showFormulaInst' formBindings termBindings t
-showFormulaInst formBindings termBindings (AndPat s t) =
-  showFormulaInst' formBindings termBindings s ++ " & " ++ showFormulaInst' formBindings termBindings t
-showFormulaInst formBindings termBindings (OrPat s t) =
-  showFormulaInst' formBindings termBindings s ++ " | " ++ showFormulaInst' formBindings termBindings t
-showFormulaInst formBindings termBindings (ImpliesPat s BottomPat) = "~" ++ showFormulaInst' formBindings termBindings s
-showFormulaInst formBindings termBindings (ImpliesPat s t) =
-  showFormulaInst' formBindings termBindings s ++ " -> " ++ showFormulaInst' formBindings termBindings t
-showFormulaInst formBindings termBindings pat = showFormulaInst' formBindings termBindings pat
+    ppFormulaInst' True formBindings termBindings s ++ " ↔ " ++ ppFormulaInst' True formBindings termBindings t
+ppFormulaInst False formBindings termBindings (AndPat (ImpliesPat s t) (ImpliesPat t' s'))
+  | s == s' && t == t' =
+    ppFormulaInst' False formBindings termBindings s ++ " <-> " ++ ppFormulaInst' False formBindings termBindings t
+ppFormulaInst unicode formBindings termBindings (AndPat s t) =
+  ppFormulaInst' unicode formBindings termBindings s ++ " & " ++ ppFormulaInst' unicode formBindings termBindings t
+ppFormulaInst True formBindings termBindings (OrPat s t) =
+  ppFormulaInst' True formBindings termBindings s ++ " ∨ " ++ ppFormulaInst' True formBindings termBindings t
+ppFormulaInst False formBindings termBindings (OrPat s t) =
+  ppFormulaInst' False formBindings termBindings s ++ " | " ++ ppFormulaInst' False formBindings termBindings t
+ppFormulaInst True formBindings termBindings (ImpliesPat s BottomPat) = "¬" ++ ppFormulaInst' True formBindings termBindings s
+ppFormulaInst False formBindings termBindings (ImpliesPat s BottomPat) = "~" ++ ppFormulaInst' False formBindings termBindings s
+ppFormulaInst True formBindings termBindings (ImpliesPat s t) =
+  ppFormulaInst' True formBindings termBindings s ++ " ⊃ " ++ ppFormulaInst' True formBindings termBindings t
+ppFormulaInst False formBindings termBindings (ImpliesPat s t) =
+  ppFormulaInst' False formBindings termBindings s ++ " -> " ++ ppFormulaInst' False formBindings termBindings t
+ppFormulaInst unicode formBindings termBindings pat = ppFormulaInst' unicode formBindings termBindings pat
 
-showSequentPat' (ants ::=> sucs) = intercalate ", " (map show ants) ++ " => " ++
-                                   intercalate ", " (map show sucs)
-
-instance Show SequentPat where
-  show = showSequentPat'
+ppSequentPat True  (ants ::=> sucs) = intercalate ", " (map (ppFormulaPat True)  ants) ++ " ⇒ " ++
+                                      intercalate ", " (map (ppFormulaPat True)  sucs)
+ppSequentPat False (ants ::=> sucs) = intercalate ", " (map (ppFormulaPat False) ants) ++ " => " ++
+                                      intercalate ", " (map (ppFormulaPat False) sucs)
 
 -- | Given a (possibly incomplete) assignment and a sequent pattern, pretty print the
 -- instantiation.
-showSequentInst :: FormulaAssignment -> TermAssignment -> SequentPat -> String
-showSequentInst formBindings termBindings (ants ::=> sucs) =
-  intercalate ", " (filter (not . null) (map (showFormulaInst formBindings termBindings) ants)) ++
+ppSequentInst :: Bool -> FormulaAssignment -> TermAssignment -> SequentPat -> String
+ppSequentInst True formBindings termBindings (ants ::=> sucs) =
+  intercalate ", " (filter (not . null) (map (ppFormulaInst True formBindings termBindings) ants)) ++
+   " ⇒ " ++
+  intercalate ", " (filter (not . null) (map (ppFormulaInst True formBindings termBindings) sucs))
+ppSequentInst False formBindings termBindings (ants ::=> sucs) =
+  intercalate ", " (filter (not . null) (map (ppFormulaInst False formBindings termBindings) ants)) ++
    " => " ++
-  intercalate ", " (filter (not . null) (map (showFormulaInst formBindings termBindings) sucs))
+  intercalate ", " (filter (not . null) (map (ppFormulaInst False formBindings termBindings) sucs))
 
 -- | Pretty print a rule pattern.
-ppRulePat :: String -> (String, RulePat) -> String
-ppRulePat pad (name, (premises, conclusion)) =
-  let pStr = intercalate "   " (map show premises)
+ppRulePat :: Bool -> String -> (String, RulePat) -> String
+ppRulePat unicode pad (name, (premises, conclusion)) =
+  let pStr = intercalate "   " (map (ppSequentPat unicode) premises)
       pWidth = length pStr
-      cStr = show conclusion
+      cStr = ppSequentPat unicode conclusion
       cWidth = length cStr
       totalWidth = max pWidth cWidth
       pPad = (totalWidth - pWidth) `div` 2
@@ -793,16 +860,16 @@ contexts (ImpliesPat s t) = contexts s ++ contexts t
 contexts _ = []
 
 -- TODO: add variables and terms to the "where" clause
-ppCalculus :: Calculus -> String
-ppCalculus (Calculus name axioms rules) =
+ppCalculus :: Bool -> Calculus -> String
+ppCalculus unicode (Calculus name axioms rules) =
   "Calculus " ++ name ++ ".\n\n" ++
   "Axioms:\n" ++ concat (map showAxiom axioms) ++ "\n" ++
   "Rules:\n\n" ++ concat (map showRule rules) ++
   qualString
 
   where showAxiom (axiomName, axiomPattern) =
-          "  " ++ show axiomPattern ++ " (" ++ axiomName ++ ")\n"
-        showRule rule = ppRulePat "  " rule ++ "\n\n"
+          "  " ++ ppSequentPat unicode axiomPattern ++ " (" ++ axiomName ++ ")\n"
+        showRule rule = ppRulePat unicode "  " rule ++ "\n\n"
 
         patternAtoms (ants ::=> sucs) = concat $ map atoms ants ++ map atoms sucs
         axiomAtoms = concat $ map patternAtoms (map snd axioms)
@@ -846,33 +913,25 @@ ppCalculus (Calculus name axioms rules) =
                      in case qualStrings of
                           [] -> ""
                           _  -> "where " ++ intercalate ",\n      " qualStrings
-                          
-instance Show Calculus where
-  show = ppCalculus
 
 -- | Pretty print a 'GoalSpec'.
 ppGoalSpec :: GoalSpec -> String
 ppGoalSpec [] = "top"
 ppGoalSpec gs = intercalate "." (map show gs)
 
-
-
 -- | \"Pretty\" print a derivation.
-ppDerivation :: Derivation -> String
-ppDerivation = ppDerivation' "" [] where
-  ppDerivation' pad spec (Stub conclusion) =
-    pad ++ show conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
-  ppDerivation' pad spec (Axiom conclusion axiom) =
-    pad ++ show conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
-  ppDerivation' pad spec (Der conclusion rule premises) =
-    pad ++ show conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
+ppDerivation :: Bool -> Derivation -> String
+ppDerivation unicode = ppDerivation' unicode "" [] where
+  ppDerivation' unicode pad spec (Stub conclusion) =
+    pad ++ ppSequent unicode conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
+  ppDerivation' unicode pad spec (Axiom conclusion axiom) =
+    pad ++ ppSequent unicode conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
+  ppDerivation' unicode pad spec (Der conclusion rule premises) =
+    pad ++ ppSequent unicode conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
     (concat $ ppPremises spec 1 premises)
     where ppPremises spec n [] = []
           ppPremises spec n (prem:prems) =
-            ppDerivation' (pad++"  ") (spec ++ [n]) prem : ppPremises spec (n+1) prems
-
-instance Show Derivation where
-  show = ppDerivation
+            ppDerivation' unicode (pad++"  ") (spec ++ [n]) prem : ppPremises spec (n+1) prems
 
 spliceStrings :: String -> String -> String
 spliceStrings x y = unlines xyLines
@@ -894,7 +953,7 @@ spliceStrings x y = unlines xyLines
         extend 0 line   = line
         extend n []     = ' ' : extend (n-1) []
         extend n (x:xs) = x   : extend (n-1) xs
-        sep = "   "
+        sep = " | "
 
 -- TODO: put this in some utility file
 padL :: Int -> String -> String
@@ -903,18 +962,18 @@ padL n = (unlines . map (replicate n ' '++) . lines)
 -- Pretty printing a derivation
 -- TODO: put an asterisk at the current subgoal
 -- TODO: maybe move some of these printing functions to a separate file (Main?)
-ppDerivationTree' :: GoalSpec -> Derivation -> GoalSpec -> String
-ppDerivationTree' subgoal (Stub conclusion) spec =
-  show conclusion ++ if spec == subgoal then "*\n" else "\n"
-ppDerivationTree' subgoal (Axiom conclusion axiom) spec =
-  "[" ++ show conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
-ppDerivationTree' subgoal (Der conclusion rule ders) spec =
+ppDerivationTree' :: Bool -> GoalSpec -> Derivation -> GoalSpec -> String
+ppDerivationTree' unicode subgoal (Stub conclusion) spec =
+  ppSequent unicode conclusion ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' unicode subgoal (Axiom conclusion axiom) spec =
+  "[" ++ ppSequent unicode conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' unicode subgoal (Der conclusion rule ders) spec =
   let newSpecs = zipWith (++) (repeat spec) (map (:[]) [1..length ders])
-      ppDers = zipWith (ppDerivationTree' subgoal) ders newSpecs
+      ppDers = zipWith (ppDerivationTree' unicode subgoal) ders newSpecs
       premString = foldl spliceStrings "" ppDers
       premStringWidth = case premString of (_:_) -> maximum (map length (lines premString))
                                            _     -> 0
-      concString = show conclusion ++ if spec == subgoal then "*" else ""
+      concString = ppSequent unicode conclusion ++ if spec == subgoal then "*" else ""
       concStringWidth = length concString
       width = max premStringWidth concStringWidth
       premPad = (width - premStringWidth) `div` 2
@@ -926,7 +985,8 @@ ppDerivationTree' subgoal (Der conclusion rule ders) spec =
      "\n" ++ concString'
 
 -- | Pretty print a derivation as a tree in the typical style.
-ppDerivationTree der subgoal = ppDerivationTree' subgoal der []
+ppDerivationTree :: Bool -> Derivation -> GoalSpec -> String
+ppDerivationTree unicode der subgoal = ppDerivationTree' unicode subgoal der []
 
 --------------------------------------------------------------------------------
 -- examples

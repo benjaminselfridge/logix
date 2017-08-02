@@ -26,7 +26,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3i, g0c, g0i, g0ip_em, g3ipm, hilbert]
+calculi = [g3c, g3i, g0c, g0i, g0ip_em, g3ipm, g4ip, hilbert]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -35,6 +35,7 @@ p = PredPat "P"
 a = FormPat "A"
 b = FormPat "B"
 c = FormPat "C"
+d = FormPat "D"
 gamma  = SetPat "Γ"
 gamma' = SetPat "Γ'"
 delta  = SetPat "Δ"
@@ -163,6 +164,35 @@ g3ip = Calculus {
             [a $| b, gamma] ::=> [c]))
   , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
              [a $> b, gamma] ::=> [c]))
+  , ("L_|_", ([],
+              [botpat, gamma] ::=> [c]))
+  ]}
+
+g4ip :: Calculus
+g4ip = Calculus {
+  name = "g4ip",
+  axioms = [("Axiom", [p, gamma] ::=> [p])],
+  rules = 
+  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
+            [gamma] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
+            [a $| b, gamma] ::=> [c]))
+  , ("L->1", ([ [b, p, gamma] ::=> [c] ],
+              [p $> b, p, gamma] ::=> [c]))
+  , ("L->2", ([ [c $> (a $> b), gamma] ::=> [d] ],
+              [(c $& a) $> b, gamma] ::=> [d]))
+  , ("L->3", ([ [c $> b, a $> b, gamma] ::=> [d] ],
+              [(c $| a) $> b, gamma] ::=> [d]))
+  , ("L->4", ([ [a $> b, gamma] ::=> [c $> a], [b, gamma] ::=> [d] ],
+              [(c $> a) $> b, gamma] ::=> [d]))
   , ("L_|_", ([],
               [botpat, gamma] ::=> [c]))
   ]}
