@@ -1,5 +1,5 @@
 {-|
-Module      : Sequent
+Module      : Calculus
 Description : Package for defining sequent calculi, and for proof checking and
               generation. 
 Copyright   : (c) Ben Selfridge, 2017
@@ -65,6 +65,8 @@ module Calculus
   , ppDerivation
   , ppDerivationTree
   ) where
+
+import Utils
 
 import Data.List
 import Data.Maybe
@@ -285,8 +287,6 @@ instFormulaPat formBindings termBindings (NoFreePat x s) = do
     True -> Nothing
     False -> return sB
 
--- TODO: removed a nub from the front of below, should be safe since there is a nub
--- in front of all uses of this function anyway.
 -- | Same as tryFormula, but for SequentPats.
 trySequent :: FormulaAssignment -> TermAssignment -> SequentPat -> ([FormulaPat], [TermPat])
 trySequent formBindings termBindings (ants ::=> sucs) =
@@ -299,16 +299,6 @@ instSequentPat formBindings termBindings (ants ::=> sucs) = do
   antsInsts <- sequence (map (instFormulaPat formBindings termBindings) ants)
   sucsInsts <- sequence (map (instFormulaPat formBindings termBindings) sucs)
   return $ concat antsInsts :=> concat sucsInsts
-
--- TODO: put these functions in Utils.hs
-appendPair :: ([a],[b]) -> ([a],[b]) -> ([a],[b])
-appendPair (xs, ys) (xs', ys') = (xs ++ xs', ys ++ ys')
-
-concatPairs :: [([a],[b])] -> ([a],[b])
-concatPairs = foldl appendPair ([],[])
-
-nubPair :: (Eq a, Eq b) => ([a],[b]) -> ([a],[b])
-nubPair (xs, ys) = (nub xs, nub ys)
 
 --------------------------------------------------------------------------------
 -- Matching patterns
@@ -509,13 +499,6 @@ stubs (Der _ _ ders) = concat $ numberAll 1 $ map stubs ders
     number n (goalSpec, sequent) = (n:goalSpec, sequent)
     numberAll n [] = []
     numberAll n (x:xs) = map (number n) x : numberAll (n+1) xs
-
-(!!!) :: [a] -> Int -> Maybe a
-infixl 9 !!!
-(x:xs) !!! n | n == 0    = Just x
-             | n <  0    = Nothing
-             | otherwise = xs !!! (n-1)
-_ !!! _ = Nothing
 
 -- | Given a 'GoalSpec' and a 'Derivation', traverse the derivation tree and find the sub-derivation
 -- pointed to by that 'GoalSpec'.
@@ -987,42 +970,6 @@ ppDerivationTree' unicode subgoal (Der conclusion rule ders) spec =
 -- | Pretty print a derivation as a tree in the typical style.
 ppDerivationTree :: Bool -> Derivation -> GoalSpec -> String
 ppDerivationTree unicode der subgoal = ppDerivationTree' unicode subgoal der []
-
---------------------------------------------------------------------------------
--- examples
-
--- atom = PredPat "P"
--- a = FormPat "A"
--- b = FormPat "B"
--- c = FormPat "C"
--- gamma = SetPat "Gamma"
--- delta = SetPat "Delta"
-
-x = VarTerm "x"
-p = Pred "P"
-q = Pred "Q"
-r = Pred "R"
--- s = Pred "S" []
--- x = Pred "x" []
--- y = Pred "y" []
--- z = Pred "z" []
--- (%&) = And
--- (%|) = Or
--- (%>) = Implies
--- f <%> g = (f %> g) %& (g %> f)
--- neg a = Implies a Bottom
--- bot = Bottom
-
--- f1 = [q %> p, q] :=> [p]
--- f2 = [p] :=> [p]
--- f3 = [] :=> [p %> neg (neg p)]
--- f4 = [] :=> [((p %| q) %& ((p %> r) %& (q %> r))) %> r]
--- f5 = [] :=> [p %| neg p]
--- peirce = [] :=> [((p %> q) %> p) %> p]
--- demorgan1 = [] :=> [neg (p %& q) <%> (neg p %| neg q)]
--- em = [] :=> [p %| neg p]
-
--- pd = Stub ([] :=> [(p %& q) %> p])
 
 --------------------------------------------------------------------------------
 -- junk

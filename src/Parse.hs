@@ -125,6 +125,8 @@ appTerm = do name <- many1 alphaNum
 --------------------------------------------------------------------------------
 -- Formulas
 
+-- TODO: add forall a b c. A(a,b,c)
+
 formula :: Parser Formula
 formula = (iffFormula <|> implSubFormula)
 

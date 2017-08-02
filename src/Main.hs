@@ -40,6 +40,11 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: for variable term instantiation, ask for binding of the actual variable, not
+-- the schematic one.
+-- TODO: add "assume" command, maintaining a list of formulas as assumptions that get
+-- prepended to every top-level goal. Ultimately want to be able to abbreviate
+-- formulas. 
 -- TODO: maybe a manual mode, where the user can input the substitution for a
 -- particular rule manually? "use" command might be cool
 -- TODO: add history command
