@@ -30,8 +30,6 @@ module Calculus
   , instFormulaPat
   , instSequentPat
   
-  -- * Pattern operators
-
   -- * Pattern matching
   , match
   , matchAll
@@ -39,17 +37,16 @@ module Calculus
   -- * Derivations
   , Derivation(..)
   , GoalSpec(..)
-  , conclusion
   , stubs
   , getGoal
   , clearSubgoal
   , applicableAxioms
   , applicableRules
-  , applyAxiom
-  , applyRule
+  , instAxiom
+  , instRule
   , tryAxiom
   , tryRule
---  , checkDerivation
+  , checkDerivation
   
   ) where
 
@@ -457,9 +454,19 @@ data Calculus = Calculus { name :: String
 --------------------------------------------------------------------------------
 -- | (Partial) derivation of a sequent
 
-data Derivation = Stub  Sequent
-                | Axiom Sequent String FormulaAssignment TermAssignment
-                | Der   Sequent String FormulaAssignment TermAssignment [Derivation]
+data Derivation = Stub  { conclusion :: Sequent }
+                | Axiom { conclusion :: Sequent
+                        , axiomName  :: String
+                        , forms      :: FormulaAssignment
+                        , terms      :: TermAssignment
+                        }
+                | Der   { conclusion :: Sequent
+                        , ruleName   :: String
+                        , forms      :: FormulaAssignment
+                        , terms      :: TermAssignment
+                        , prems      :: [Derivation]
+                        }
+  deriving (Eq)
 
 -- | Return all applicable axioms for a sequent. Gives the name of the axiom, and
 -- the assignment that will match the formula to the conclusion of the axiom.
@@ -470,7 +477,14 @@ applicableAxioms calculus (ants :=> sucs) = do
   return (name, formBinding, termBinding)
 
 -- | Return all applicable rules for a sequent. Gives the name of the rule, and
--- the assignment that will match the formula to the conclusion of the rule.
+-- the assignment that will match the formula to the conclusion of the rule. Note
+-- that in general, this function does not provide the entire assignment that would
+-- be necessary to actually instantiate the rule. If the premise of the rule contains
+-- patterns that don't appear anywhere in the conclusion (like in a cut rule, for
+-- instance), then we will need an assignment for that pattern before we can apply
+-- the rule. Additionally, if the premise contains any term patterns that don't
+-- appear in the conclusion, those will need to be added to the term assignment in
+-- order to apply the rule.
 applicableRules :: Calculus -> Sequent -> [(String, FormulaAssignment, TermAssignment)]
 applicableRules calculus (ants :=> sucs) = do
   (name, (_, antPats ::=> sucPats)) <- rules calculus
@@ -502,34 +516,10 @@ getGoal (x:xs) (Der _ _ _ _ ders) = do
   getGoal xs der
 getGoal _ _ = Nothing
 
--- | Get the conclusion of a derivation (the sequent that appears underneath the line).
-conclusion :: Derivation -> Sequent
-conclusion (Stub  sequent)         = sequent
-conclusion (Axiom sequent _ _ _)   = sequent
-conclusion (Der   sequent _ _ _ _) = sequent
-
-setElt :: Int -> a -> [a] -> [a]
-setElt _ _ [] = []
-setElt 0 x (y:ys) = x : ys
-setElt n x (y:ys) | n > 0 = y : (setElt (n-1) x ys)
-
 -- | Given a 'Calculus', a axiom name, a 'GoalSpec' (pointer to a particular node in
 -- the derivation tree), and a 'Derivation', return a new derivation consisting of
 -- the old one with the given node replaced with an axiom application. Fails if the
 -- node doesn't exist.
-
--- TODO: actually check the applicability here. We don't want to have to assume the
--- axiom is applicable; after all, it does return a Maybe Derivation, and we can use
--- the fact that this /checks/ applicability in the proof checking procedure.
-applyAxiom :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
-applyAxiom calculus name formBindings termBindings [] (Stub sequent) = do
-  axPat  <- lookup name (axioms calculus)
-  axInst <- instSequentPat formBindings termBindings axPat
-  return $ Axiom sequent name formBindings termBindings
-applyAxiom calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb ders) = do
-  der <- ders !!! (x-1)
-  newDer <- applyAxiom calculus name formBindings termBindings xs der
-  return $ Der sequent rule fb tb (setElt (x-1) newDer ders)
 
 -- | Given a calculus, an axiom of that calculus, and an assignment, return a list of
 -- all the unbound variables in the axiom.
@@ -539,21 +529,19 @@ tryAxiom calculus name formBindings termBindings = case pat of
   Just sequent -> trySequent formBindings termBindings sequent
   where pat = lookup name (axioms calculus)
 
--- | Given a 'Calculus', a rule name, an assignment for the rule, a 'GoalSpec'
--- (pointer to a particular node in the derivation tree), and a 'Derivation', return
--- a new derivation consisting of the old one with the given node replaced with a
--- rule application. Fails if the node doesn't exist, or if instantation (via
--- instSequentPat) fails.
-applyRule :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
-applyRule calculus name formBindings termBindings [] der = do
-  (prems, conc) <- lookup name (rules calculus)
-  premInsts <- sequence $ map (instSequentPat formBindings termBindings) prems
-  concInst <- instSequentPat formBindings termBindings conc
-  return $ Der (conclusion der) name formBindings termBindings (map Stub premInsts)
-applyRule calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb ders) = do
+instAxiom :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
+instAxiom calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb ders) = do
   der <- ders !!! (x-1)
-  newDer <- applyRule calculus name formBindings termBindings xs der
+  newDer <- instAxiom calculus name formBindings termBindings xs der
   return $ Der sequent rule fb tb (setElt (x-1) newDer ders)
+instAxiom calculus name formBindings termBindings [] der = do
+  axPat  <- lookup name (axioms calculus)
+  axInst <- instSequentPat formBindings termBindings axPat
+  -- Notice that even though we are not using axInst, we are implicitly using it
+  -- because if the above assignment yield a Nothing (because the instantiation was
+  -- invalid), then the result of instAxiom will be Nothing. I only gave it a name
+  -- to be explicit.
+  return $ Axiom (conclusion der) name formBindings termBindings
 
 -- | Given a calculus, a rule of that calculus, and an assignment, return a list of
 -- all the unbound variables in the rule.
@@ -564,41 +552,45 @@ tryRule calculus name formBindings termBindings = case pat of
     nubPair $ trySequent formBindings termBindings conc `appendPair` concatPairs (map (trySequent formBindings termBindings) prems)
   where pat = lookup name (rules calculus)
 
+-- | Given a 'Calculus', a rule name, an assignment for the rule, a 'GoalSpec'
+-- (pointer to a particular node in the derivation tree), and a 'Derivation', return
+-- a new derivation consisting of the old one with the given node replaced with a
+-- rule application. Fails if the node doesn't exist, or if instantation (via
+-- instSequentPat) fails.
+instRule :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
+instRule calculus name formBindings termBindings [] der = do
+  (prems, conc) <- lookup name (rules calculus)
+  premInsts <- sequence $ map (instSequentPat formBindings termBindings) prems
+  concInst <- instSequentPat formBindings termBindings conc
+  -- Notice that even though we are not using concInst, we are implicitly using it
+  -- because if the above assignment yield a Nothing (because the instantiation was
+  -- invalid), then the result of instRule will be Nothing. I only gave it a name to
+  -- be explicit.
+  return $ Der (conclusion der) name formBindings termBindings (map Stub premInsts)
+instRule calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb ders) = do
+  der <- ders !!! (x-1)
+  newDer <- instRule calculus name formBindings termBindings xs der
+  return $ Der sequent rule fb tb (setElt (x-1) newDer ders)
+ 
 clearSubgoal :: GoalSpec -> Derivation -> Maybe Derivation
-clearSubgoal [] (Stub seq)          = return $ Stub seq
-clearSubgoal [] (Axiom seq _ _ _)   = return $ Stub seq
-clearSubgoal [] (Der   seq _ _ _ _) = return $ Stub seq
+clearSubgoal [] d = return $ Stub (conclusion d)
 clearSubgoal (i:is) (Der seq rule fb tb ders) = do
   der    <- ders !!! (i-1)
   newDer <- clearSubgoal is der
   return $ Der seq rule fb tb (setElt (i-1) newDer ders)
 
--- TODO: fix this
 -- | Given a "Calculus" and a "Derivation", check that the derivation is valid.
--- checkDerivation :: Calculus -> Derivation -> Either Derivation ()
--- checkDerivation calculus (Stub _) = return ()
--- checkDerivation calculus d@(Axiom conc axiom formBindings termBindings)
---   | Just (lax ::=> rax) <- lookup axiom (axioms calculus)
---   , (l :=> r) <- conc = do
---       let matches = matchAll [(lax, l), (rax, r)]
---       case matches of
---         [] -> Left d
---         _  -> return ()
--- checkDerivation calculus d@(Der conc rule prems)
---   | Just (rulePrems, ruleConc) <- lookup rule (rules calculus)
---   , formulas <- foldl (++) [] (map (\(l  :=> r) -> [l,r]) (conc:map conclusion prems))
---   , patterns <- foldl (++) [] (map (\(l ::=> r) -> [l,r]) (ruleConc:rulePrems)) = do
---       mapM_ (checkDerivation calculus) prems
---       let matches = matchAll (zipAll patterns formulas)
---           -- use zipAll to make sure we 
---       case matches of
---         [] -> Left d
---         _ -> return ()
---   where zipAll (a:as) (b:bs) = (a,b)  : zipAll as bs
---         zipAll (a:as) []     = (a,[]) : zipAll as []
---         zipAll []     (b:bs) = ([],b) : zipAll [] bs
---         zipAll []     []     = []
--- checkDerivation _ d = Left d -- rule not found
+checkDerivation :: Calculus -> Derivation -> Either Derivation ()
+checkDerivation calculus (Stub _) = return ()
+checkDerivation calculus d@(Axiom conc axiomName formBindings termBindings)
+  | Just d' <- instAxiom calculus axiomName formBindings termBindings [] d = return ()
+  | otherwise = Left d
+checkDerivation calculus d@(Der conc ruleName formBindings termBindings _)
+  | Just d' <- instRule calculus ruleName formBindings termBindings [] d =
+      if map conclusion (prems d) == map conclusion (prems d')
+      then mapM_ (checkDerivation calculus) (prems d)
+      else Left d
+  | otherwise = Left d
 
 --------------------------------------------------------------------------------
 -- junk

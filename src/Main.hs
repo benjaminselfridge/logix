@@ -159,13 +159,21 @@ showHistory env _ = mapM_ putStrLn (reverse (history env)) *> return env
 clear :: Env -> String -> IO Env
 clear env arg =
   if null subgoalString
-  then do putStrLn "Please provide a goal (e.g. 1.2.2)"
-          return env
+  then case clearSubgoal (subgoal env) (goal env) of
+         Nothing -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
+                       return env
+         Just newGoal -> do
+           putStr $ "Current subgoal: "
+           putStr $ ppSequent (unicode env) (conclusion $ fromJust $ getGoal (subgoal env) newGoal)
+           putStrLn $ " [" ++ ppGoalSpec (subgoal env) ++ "]"
+           let newHistory = ("clear " ++ subgoalString) : (history env)
+           return $ env { goal = newGoal, history = newHistory }
   else case clearSubgoal subgoalSpec (goal env) of
          Nothing -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
                        return env
          Just newGoal -> do
-           putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion newGoal)
+           putStr $ "Current subgoal: "
+           putStr $ ppSequent (unicode env) (conclusion $ fromJust $ getGoal subgoalSpec newGoal)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
            let newHistory = ("clear " ++ subgoalString) : (history env)
            return $ env { goal = newGoal, subgoal = subgoalSpec, history = newHistory }
@@ -179,13 +187,12 @@ clear env arg =
 -- TODO: make this prettier
 check :: Env -> String -> IO Env
 check env _ = do
-  -- case checkDerivation (calculus env) (goal env) of
-  --   Left d -> do
-  --     putStrLn "Error in subderivation: "
-  --     putStr $ ppDerivation (goal env)
-  --   Right () -> do
-  --     putStrLn $ "Valid derivation in " ++ name (calculus env)
-  putStrLn "check is not implemented currently."
+  case checkDerivation (calculus env) (goal env) of
+    Left d -> do
+      putStrLn "Error in subderivation: "
+      putStrLn $ ppDerivation (unicode env) d
+    Right () -> do
+      putStrLn $ "Valid derivation in " ++ name (calculus env)
   return env
 
 getFormBindings :: Bool -> [FormulaPat] -> IO FormulaAssignment
@@ -278,7 +285,7 @@ rule env arg =
               extraFormBindings <- getFormBindings (unicode env) unboundForms
               extraTermBindings <- getTermBindings (unicode env) unboundTerms
               -- TODO: get term bindings for unbound terms
-              case applyRule (calculus env) name
+              case instRule (calculus env) name
                                  (extraFormBindings ++ formBinding)
                                  (extraTermBindings ++ termBinding)
                                  (subgoal env)
@@ -335,7 +342,7 @@ axiom env arg =
               putStrLn $ "Applying " ++ name ++ "."
 
               -- TODO: if we add extra bindings, we need to update this line.
-              let Just newGoal = applyAxiom (calculus env) name formBindings termBindings (subgoal env) (goal env)
+              let Just newGoal = instAxiom (calculus env) name formBindings termBindings (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
               putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
                 ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
