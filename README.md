@@ -256,12 +256,34 @@ Changing goal to " ⇒ a ⊃ ((b & (c & d)) ⊃ a)".
 ## More info & current status
 
 Currently, logix supports predicate calculus without equality. However, I have plans
-to support term equality in the very near future (I want to do some group
-theory!). Aside from that (temporary) limitation, logix can pretty much represent any
-sequent calculus I know of. The only exceptions from [1] are the GN, GM, NG and MG
-calculi, which use patterns like A^n, representing *any number of appearances* of
-formula A. This could be added as a new kind of pattern, but I have not prioritized
-that at this stage.
+to support term equality in the very near future. Aside from that (temporary)
+limitation, logix can pretty much represent any sequent calculus I know of. The only
+exceptions from [1] are the GN, GM, NG and MG calculi, which use patterns like A^n,
+representing *any number of appearances* of formula A. This could be added as a new
+kind of pattern, but I have not prioritized that at this stage.
+
+I am also planning to add a mechanism for theory-building via axioms/assumptions and
+theorems. This would enable one to build the theory of groups into a logix session
+and prove theorems about groups without having to use cumbersome formulas every
+time. Axioms would be top-level assumptions that would be automatically inserted into
+the left-hand side of every goal sequent initiated by the `top` command. Theorems
+would be similarly inserted. We would abbreviate axioms and theorems by their names
+wherever they appear verbatim in a sequent. My goal is to make working with theories
+like Group as straightforward and clean as possible; right now, it's technically
+possible to do group theory, but I don't want to because I have to parse the entire
+set of group axioms every time I want to figure out which rule to apply.
+Abbreviations and top-level axioms/theorems are necessary to do anything useful, so
+that is definitely coming.
+
+Finally, I also plan on generalizing logix to include systems with different kinds of
+connectives; modal/temporal logics, linear logics, etc. There are currently three
+binary connectives, two quantifiers, one unary connective, and one 0-ary
+connective. There's no inherent meaning to these quantifiers; it depends on what
+rules you write. You can specify, in logix, a calculus just like G3c but with |
+swapped with &. So there's no real reason why we can't generalize these operators and
+allow the user to define their own. The only issue with this would be parsing
+precedence, but that could be part of defining a new connective/quantifier;
+specifying its precedence. So that is another addition I'm excited to start on.
 
 Please contact me if you have any feedback or questions, and especially if you
 discover a bug.

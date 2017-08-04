@@ -16,14 +16,14 @@ extra-source-files:  README.md
 executable logix
   hs-source-dirs:      src
   main-is:             Main.hs
-  other-modules:       Calculus, Calculi, Parse, Utils
+  other-modules:       Calculus, Calculi, Parse, Utils, PPCalculus
   default-language:    Haskell2010
   build-depends:       base >= 4.7,
                        split
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Calculus, Calculi, Parse, Utils
+  exposed-modules:     Calculus, Calculi, Parse, Utils, PPCalculus
   other-modules:
   default-language:    Haskell2010
   build-depends:       base >= 4.7,

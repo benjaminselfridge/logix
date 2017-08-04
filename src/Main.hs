@@ -1,10 +1,10 @@
-{-# LANGUAGE RankNTypes #-}
-
 module Main where
 
 import Calculus
 import Calculi
 import Parse
+import PPCalculus
+import Utils
 
 import Data.Char
 import Data.List
@@ -14,25 +14,13 @@ import System.IO
 
 version = "0.2.0"
 
--- TODO: separate this out into a Utils.hs file
-(!!!) :: [a] -> Int -> Maybe a
-infixl 9 !!!
-(x:xs) !!! n | n == 0    = Just x
-             | n <  0    = Nothing
-             | otherwise = xs !!! (n-1)
-_ !!! _ = Nothing
-
-readMaybe :: Read a => String -> Maybe a
-readMaybe s = case reads s of
-                [] -> Nothing
-                [(a, _)] -> Just a
-
 data Env = Env { goal     :: Derivation
                , subgoal  :: GoalSpec
                , calculus :: Calculus
                , quitFlag :: Bool
                , pretty   :: Bool
                , unicode  :: Bool
+               , history  :: [String]
                }
 
 getCurrentGoal :: Env -> Derivation
@@ -40,20 +28,14 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
--- TODO: for variable term instantiation, ask for binding of the actual variable, not
--- the schematic one.
+-- TODO: add option to write "rule L&" or whatever, which only displays the
+-- possibilities for L&
 -- TODO: add "assume" command, maintaining a list of formulas as assumptions that get
 -- prepended to every top-level goal. Ultimately want to be able to abbreviate
 -- formulas. 
 -- TODO: maybe a manual mode, where the user can input the substitution for a
 -- particular rule manually? "use" command might be cool
--- TODO: add history command
 -- TODO: "examples" command that spits out examples of how to write formulas
--- TODO: add a unicode option. requires separating all show instances into a separate
--- library. 
--- TODO: print help commands with a fixed width.
--- TODO: after switching subgoals, either directly or by applying a rule or axiom,
--- print all applicable rules.
 commands :: [(String, (String, [String], Env -> String -> IO Env))]
 commands = [ ("help", ("Print all commands.",
                        [],
@@ -61,7 +43,7 @@ commands = [ ("help", ("Print all commands.",
            , ("top", ("Change top-level goal. If given no argument, " ++
                        " just prints the top-level goal.",
                        ["<goal>"],
-                       setGoal))
+                       setTopGoal))
            , ("rule", ("Apply a rule to the current subgoal. If given no argument," ++
                        " just prints all applicable rules.",
                        ["<ruleid>"],
@@ -77,6 +59,9 @@ commands = [ ("help", ("Print all commands.",
                        " just prints the current subgoal.",
                        ["<subgoal id>"],
                        changeSubgoal))
+           , ("history", ("Print out history of all commands you've entered.",
+                          [],
+                          showHistory))
            , ("clear", ("Clear the derivation at a particular subgoal.",
                         ["<subgoal>"],
                         clear))
@@ -114,8 +99,8 @@ help env _ = do mapM_ showCommand commands
           putStrLn $ name ++ " " ++ intercalate " " args
           putStrLn $ "  " ++ desc
 
-setGoal :: Env -> String -> IO Env
-setGoal env arg =
+setTopGoal :: Env -> String -> IO Env
+setTopGoal env arg =
   if null goalString
   then do putStrLn $ ppSequent (unicode env) $ conclusion (goal env)
           return env
@@ -124,8 +109,11 @@ setGoal env arg =
              return env
     [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
                         return $ env { goal = Stub sequent,
-                                     subgoal = []
-                                   }
+                                       subgoal = [],
+                                       history = ["top " ++ goalString, "calc " ++ name (calculus env)]
+                                       -- clear history because we are starting a new
+                                       -- proof 
+                                     }
   where goalString = dropWhile (==' ') arg
 
 listGoals :: Env -> String -> IO Env
@@ -154,13 +142,19 @@ changeSubgoal env arg =
          Just der -> do
            putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion der)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
-           return $ env { subgoal = subgoalSpec }
+           let newHistory = case (history env) of
+                              (comm:cs) | "goal " `isPrefixOf` comm -> ("goal " ++ subgoalString) : cs
+                              otherwise -> ("goal " ++ subgoalString) : (history env)
+           return $ env { subgoal = subgoalSpec, history = newHistory }
   where subgoalString = dropWhile (== ' ') arg
         subgoalSpec = if subgoalString == "top"
                       then []
                       else case sequence $ map readMaybe (splitOn "." subgoalString) of
                              Just spec -> spec
                              Nothing   -> []
+
+showHistory :: Env -> String -> IO Env
+showHistory env _ = mapM_ putStrLn (reverse (history env)) *> return env
 
 clear :: Env -> String -> IO Env
 clear env arg =
@@ -173,7 +167,8 @@ clear env arg =
          Just newGoal -> do
            putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion newGoal)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
-           return $ env { goal = newGoal, subgoal = subgoalSpec }
+           let newHistory = ("clear " ++ subgoalString) : (history env)
+           return $ env { goal = newGoal, subgoal = subgoalSpec, history = newHistory }
   where subgoalString = dropWhile (== ' ') arg
         subgoalSpec = if subgoalString == "top"
                       then []
@@ -233,7 +228,7 @@ getFormBindings unicode (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat 
 getTermBindings :: Bool -> [TermPat] -> IO TermAssignment
 getTermBindings unicode [] = return []
 getTermBindings unicode (VarPat x:pats) = do
-  putStr $ "Need binding for variable <" ++ x ++ ">:\n  " ++ x ++ " ::= "
+  putStr $ "Need binding for variable <" ++ x ++ ">:\n  <" ++ x ++ "> ::= "
   hFlush stdout
   str <- getLine
   let xs = parse (spaces *> many1 alphaNum <* end) str
@@ -244,7 +239,7 @@ getTermBindings unicode (VarPat x:pats) = do
                   return $ (x, VarTerm y) : rest
     _ -> error $ "multiple parses for variable term: " ++ show x
 getTermBindings unicode (TermPat t:pats) = do
-  putStr $ "Need binding for term <" ++ t ++ ">:\n  " ++ t ++ " ::= "
+  putStr $ "Need binding for term <" ++ t ++ ">:\n  <" ++ t ++ "> ::= "
   hFlush stdout
   str <- getLine
   let ts = parse (spaces *> term <* end) str
@@ -293,7 +288,8 @@ rule env arg =
                   let nextSubgoal = getNextSubgoal newGoal (subgoal env)
                   putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
                     ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
-                  return env { goal = newGoal, subgoal = nextSubgoal }
+                  let newHistory = ("rule " ++ ruleString) : (history env)
+                  return env { goal = newGoal, subgoal = nextSubgoal, history = newHistory }
                 Nothing -> do
                   putStrLn "Invalid instantiation."
                   return env
@@ -317,6 +313,7 @@ rule env arg =
         showRules n [] = []
         showRules n (x:xs) = showRule n x : showRules (n+1) xs
 
+-- TODO: add term binding machinery for rules to axioms as well.
 axiom :: Env -> String -> IO Env
 axiom env arg =
   if null axiomString
@@ -328,28 +325,32 @@ axiom env arg =
           case axioms !!! (axiomNum-1) of
             Nothing -> do putStrLn $ "No axiom corresponding to " ++ axiomString
                           return env
-            Just (name, formBinding, termBinding) -> do
+            Just (name, formBindings, termBindings) -> do
               -- we should never have any unbound variables for an axiom, but we
               -- provide this just for the sake of completeness.
               -- TODO: fix this. tryAxiom returns a list of unbound terms as well.
-              let unboundVars = fst $ tryAxiom (calculus env) name formBinding termBinding
-              extraBindings <- getFormBindings (unicode env) unboundVars
+              -- TODO: We're never really using the extra bindings here...
+              let unboundVars = fst $ tryAxiom (calculus env) name formBindings termBindings
+--              extraBindings <- getFormBindings (unicode env) unboundVars
               putStrLn $ "Applying " ++ name ++ "."
-              let Just newGoal = applyAxiom (calculus env) name (subgoal env) (goal env)
+
+              -- TODO: if we add extra bindings, we need to update this line.
+              let Just newGoal = applyAxiom (calculus env) name formBindings termBindings (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
               putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
                 ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
-              return env { goal = newGoal, subgoal = nextSubgoal }
+              let newHistory = ("axiom " ++ axiomString) : (history env)
+              return env { goal = newGoal, subgoal = nextSubgoal, history = newHistory }
   where axiomString = dropWhile (== ' ') arg
         axiomNum = case readMaybe axiomString of
                     Just num -> num
                     Nothing  -> 0
-        showAxiom n (name, formBinding, termBinding) = "  " ++ show n ++ ". " ++ name ++ " with " ++ ppFormulaAssignment formBinding
+        showAxiom n (name, formBindings, termBindings) = "  " ++ show n ++ ". " ++ name ++ " with " ++ ppFormulaAssignment formBindings
         showAxioms n [] = []
         showAxioms n (x:xs) = showAxiom n x : showAxioms (n+1) xs
-        ppFormulaAssignment bindings = intercalate ", " (map showBinding bindings)
-        showBinding (var, [f]) = var ++ " := " ++ ppFormula (unicode env) f
-        showBinding (var, fs)  = var ++ " := [" ++ ppFormulaList (unicode env) fs ++ "]"
+        ppFormulaAssignment bindings = intercalate ", " (map showBindings bindings)
+        showBindings (var, [f]) = var ++ " := " ++ ppFormula (unicode env) f
+        showBindings (var, fs)  = var ++ " := [" ++ ppFormulaList (unicode env) fs ++ "]"
 
 printProofTree :: Env -> String -> IO Env
 printProofTree env _ =
@@ -385,7 +386,8 @@ changeCalculus env arg =
       Nothing   -> do putStrLn $ "No calculus named \"" ++ calcName ++ "\"."
                       return env
       Just calc -> do putStrLn $ "Changing calculus to " ++ calcName ++ "."
-                      return $ env { calculus = calc }
+                      let newHistory = ("calc " ++ calcName) : (history env)
+                      return $ env { calculus = calc, history = newHistory }
   where calcName = dropWhile (==' ') arg
 
 -- TODO: fix spacing for axiom
@@ -437,4 +439,5 @@ main = do
              , quitFlag = False
              , pretty = True
              , unicode = True
+             , history = ["top => P -> P", "calc " ++ name (head calculi)]
              }

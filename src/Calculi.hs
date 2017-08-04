@@ -36,6 +36,7 @@ a = FormPat "A"
 b = FormPat "B"
 c = FormPat "C"
 d = FormPat "D"
+e = FormPat "E"
 gamma  = SetPat "Γ"
 gamma' = SetPat "Γ'"
 delta  = SetPat "Δ"
@@ -185,21 +186,21 @@ g4ip = Calculus {
             [a $& b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
             [a $| b, gamma] ::=> [c]))
-  , ("L->1", ([ [b, p, gamma] ::=> [c] ],
-              [p $> b, p, gamma] ::=> [c]))
-  , ("L->2", ([ [c $> (a $> b), gamma] ::=> [d] ],
-              [(c $& a) $> b, gamma] ::=> [d]))
-  , ("L->3", ([ [c $> b, a $> b, gamma] ::=> [d] ],
-              [(c $| a) $> b, gamma] ::=> [d]))
-  , ("L->4", ([ [a $> b, gamma] ::=> [c $> a], [b, gamma] ::=> [d] ],
-              [(c $> a) $> b, gamma] ::=> [d]))
+  , ("L0->", ([ [p, b, gamma] ::=> [e] ],
+              [p, p $> b, gamma] ::=> [e]))
+  , ("L&->", ([ [c $> (d $> b), gamma] ::=> [e] ],
+              [(c $& d) $> b, gamma] ::=> [e]))
+  , ("L|->", ([ [c $> b, d $> b, gamma] ::=> [e] ],
+              [(c $| d) $> b, gamma] ::=> [e]))
+  , ("L->>", ([ [c, d $> b, gamma] ::=> [d], [b, gamma] ::=> [e] ],
+              [(c $> d) $> b, gamma] ::=> [e]))
   , ("L_|_", ([],
               [botpat, gamma] ::=> [c]))
   ]}
 
 g0i :: Calculus
 g0i = Calculus {
-  name = "g0ip",
+  name = "g0i",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],

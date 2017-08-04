@@ -28,3 +28,8 @@ infixl 9 !!!
              | n <  0    = Nothing
              | otherwise = xs !!! (n-1)
 _ !!! _ = Nothing
+
+readMaybe :: Read a => String -> Maybe a
+readMaybe s = case reads s of
+                [] -> Nothing
+                [(a, _)] -> Just a
