@@ -320,7 +320,8 @@ match (BottomPat:pats) fs =
              , fs'       <- [delete Bottom fs]
              , matchRest <- match pats fs']
 match ((BinaryOpPat op pat1 pat2):pats) fs =
-  [(mergeForms, matchTerms) | BinaryOp op c1 c2 <- nub fs
+  [(mergeForms, matchTerms) | BinaryOp op' c1 c2 <- nub fs
+                            , op == op'
                             , (c1Forms, c1Terms) <- match [pat1] [c1]
                             , (c2Forms, c2Terms) <- match [pat2] [c2]
                             , (matchForms, matchTerms) <- match pats (delete (BinaryOp op c1 c2) fs)
@@ -525,6 +526,8 @@ tryAxiom calculus name formBindings termBindings = case pat of
   Just sequent -> trySequent formBindings termBindings sequent
   where pat = lookup name (axioms calculus)
 
+-- TODO: for instAxiom and instRule, make it impossible to instantiate a rule where
+-- hte ops or quantifiers don't exactly match
 instAxiom :: Calculus -> String -> FormulaAssignment -> TermAssignment -> GoalSpec -> Derivation -> Maybe Derivation
 instAxiom calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb ders) = do
   der <- ders !!! (x-1)
