@@ -157,8 +157,7 @@ opFormula calc op@(UniName (aop, uop)) = do
 baseFormula :: Calculus -> Parser Formula
 baseFormula calc = paren (formula calc) <|>
                    terminalFormula <|>
-                   undefined
-                   -- quantFormula calc
+                   asum (map (\qt -> quantFormula calc qt) (calcQts calc))
 
 terminalFormula :: Parser Formula
 terminalFormula = predFormula <|> bottomFormula

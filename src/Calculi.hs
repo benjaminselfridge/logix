@@ -1,6 +1,6 @@
 {-|
 Module      : Sequent
-Description : Package for defining sequent calculi, and for proof checking and
+Description : Package for defining sequent calculi, andPat for proof checking andPat
               generation.
 Copyright   : (c) Ben Selfridge, 2017
 License     : BSD3
@@ -14,15 +14,24 @@ customize the software.
 
 module Calculi
   ( calculi
+  , andForm
+  , orForm
+  , impliesForm
+  , forallForm
+  , existsForm
+  , andPat
+  , orPat
+  , impliesPat
+  , forallPat
+  , existsPat
   ) where
 
 import Calculus
-import Prelude hiding (and, or)
 
 import Data.Char
 
 -- To add your own calculus to logix, define it under the "Calculi definitions"
--- section, and add it to the following list:
+-- section, andPat add it to the following list:
 
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
@@ -32,12 +41,19 @@ calculi = [g3c]
 --------------------------------------------------------------------------------
 -- Calculi definitions
 
--- connectives
-and     = BinaryOpPat (UniName ("&","&"))
-or      = BinaryOpPat (UniName ("|","∨"))
-implies = BinaryOpPat (UniName ("->","→"))
-forall  = QuantPat (UniName ("forall ","∀"))
-exists  = QuantPat (UniName ("exists ","∃"))
+-- formula connectives
+andForm     = BinaryOp (UniName ("&","&"))
+orForm      = BinaryOp (UniName ("|","∨"))
+impliesForm = BinaryOp (UniName ("->","→"))
+forallForm  = Quant (UniName ("forall ","∀"))
+existsForm  = Quant (UniName ("exists ","∃"))
+
+-- connective patterns
+andPat     = BinaryOpPat (UniName ("&","&"))
+orPat      = BinaryOpPat (UniName ("|","∨"))
+impliesPat = BinaryOpPat (UniName ("->","→"))
+forallPat  = QuantPat (UniName ("forall ","∀"))
+existsPat  = QuantPat (UniName ("exists ","∃"))
 
 -- base patterns
 p = PredPat "P"
@@ -51,24 +67,24 @@ gamma' = SetPat "Γ'"
 delta  = SetPat "Δ"
 delta' = SetPat "Δ'"
 
--- quantifier and subst patterns
+-- quantifier andPat subst patterns
 a_x_y = SubstPat "x" (VarPat "y") "A"
 a_x_t = SubstPat "x" (TermPat "t") "A"
-forall_x_a = forall "x" a
-exists_x_a = exists "x" a
+forall_x_a = forallPat "x" a
+exists_x_a = existsPat "x" a
 nofree_y = NoFreePat "y"
 
--- | Infix AndPat.
-($&) = and
+-- | Infix AndPatPat.
+($&) = andPat
 
 -- | Infix OrPat.
-($|) = or
+($|) = orPat
 
 -- | Infix ImpliesPat.
-($>) = implies
+($>) = impliesPat
 
 -- | Infix iff.
-($<>) = \a b -> (implies a b $& implies b a)
+($<>) = \a b -> (impliesPat a b $& impliesPat b a)
 
 -- | Bottom pattern.
 botpat = BottomPat

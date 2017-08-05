@@ -108,7 +108,7 @@ setTopGoal env arg =
   if null goalString
   then do putStrLn $ ppSequent (unicode env) $ conclusion (goal env)
           return env
-  else case parse (sequent <* end) goalString of
+  else case parse (sequent (calculus env) <* end) goalString of
     [] -> do putStrLn $ "Couldn't parse sequent \"" ++ goalString ++ "\"."
              return env
     [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
@@ -198,42 +198,42 @@ check env _ = do
       putStrLn $ "Valid derivation in " ++ calcName (calculus env)
   return env
 
-getFormBindings :: Bool -> [FormulaPat] -> IO FormulaAssignment
-getFormBindings unicode [] = return []
-getFormBindings unicode (PredPat p:pats) = do
+getFormBindings :: Bool -> Calculus -> [FormulaPat] -> IO FormulaAssignment
+getFormBindings unicode _ [] = return []
+getFormBindings unicode calc (PredPat p:pats) = do
   putStr $ "Need binding for atom " ++ p ++ ":\n  " ++ p ++ " ::= "
   hFlush stdout
   str <- getLine
   let fs = parse (spaces *> atomFormula <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single atom identifier."
-             getFormBindings unicode (PredPat p:pats)
-    [(f,_)] -> do rest <- getFormBindings unicode pats
+             getFormBindings unicode calc (PredPat p:pats)
+    [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (p, [f]) : rest
     x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
-getFormBindings unicode (FormPat a:pats) = do
+getFormBindings unicode calc (FormPat a:pats) = do
   putStr $ "Need binding for variable " ++ a ++ ":\n  " ++ a ++ " ::= "
   hFlush stdout
   str <- getLine
-  let fs = parse (spaces *> formula <* end) str
+  let fs = parse (spaces *> formula calc <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a single formula."
-             getFormBindings unicode (FormPat a:pats)
-    [(f,_)] -> do rest <- getFormBindings unicode pats
+             getFormBindings unicode calc (FormPat a:pats)
+    [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (a, [f]) : rest
     x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
-getFormBindings unicode (SetPat gamma:pats) = do
+getFormBindings unicode calc (SetPat gamma:pats) = do
   putStr $ "Need binding for formula list " ++ gamma ++ ":\n  " ++ gamma ++ " ::= "
   hFlush stdout
   str <- getLine
-  let fs = parse (spaces *> formulaList <* end) str
+  let fs = parse (spaces *> formulaList calc <* end) str
   case fs of
     [] -> do putStrLn $ "Couldn't parse. Please enter a comma-separated list of formulas."
-             getFormBindings unicode (SetPat gamma:pats)
-    [(fs,_)] -> do rest <- getFormBindings unicode pats
+             getFormBindings unicode calc (SetPat gamma:pats)
+    [(fs,_)] -> do rest <- getFormBindings unicode calc pats
                    return $ (gamma, fs) : rest
     x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode) (map fst x))
-getFormBindings unicode (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
+getFormBindings unicode _ (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
 
 getTermBindings :: Bool -> [TermPat] -> IO TermAssignment
 getTermBindings unicode [] = return []
@@ -285,7 +285,7 @@ rule env arg =
             Just (name, formBinding, termBinding) -> do
               -- TODO: fix this. tryRule returns a list of unbound terms as well.
               let (unboundForms, unboundTerms) = tryRule (calculus env) name formBinding termBinding
-              extraFormBindings <- getFormBindings (unicode env) unboundForms
+              extraFormBindings <- getFormBindings (unicode env) (calculus env) unboundForms
               extraTermBindings <- getTermBindings (unicode env) unboundTerms
               -- TODO: get term bindings for unbound terms
               case instRule (calculus env) name
@@ -443,7 +443,7 @@ introMessage =
 main :: IO ()
 main = do
   putStr introMessage
-  repl $ Env { goal = Stub ([] :=> [Implies (Pred "P" []) (Pred "P" [])])
+  repl $ Env { goal = Stub ([] :=> [impliesForm (Pred "P" []) (Pred "P" [])])
              , subgoal = []
              , calculus = head calculi
              , quitFlag = False

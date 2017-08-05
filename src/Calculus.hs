@@ -29,6 +29,7 @@ module Calculus
   , TermAssignment
   , Calculus(..)
   , calcOps
+  , calcQts
   , instFormulaPat
   , instSequentPat
 
@@ -422,19 +423,29 @@ data Calculus = Calculus { calcName :: String
                          , rules    :: [(String, RulePat)]
                          }
 
--- TODO: extract all ops in a calculus for parsing (no nub)
+calcFormulaPats :: Calculus -> [FormulaPat]
+calcFormulaPats calc = forms where
+  rulePats = map snd (rules calc)
+  formPats = concat $ map (\(prems, conc) -> conc : prems) rulePats
+  forms    = concat $ map (\(ants ::=> sucs) -> ants ++ sucs) formPats
+
 formPatOps :: FormulaPat -> [UniName]
 formPatOps (BinaryOpPat op f1 f2) = op : (formPatOps f1 ++ formPatOps f2)
-formPatOps (QuantPat op _ f)      = op : formPatOps f
+formPatOps (QuantPat _ _ f)       = formPatOps f
 formPatOps (NoFreePat _ f)        = formPatOps f
 formPatOps _                      = []
 
 calcOps :: Calculus -> [UniName]
-calcOps calc = nub ops where
-   rulePats = map snd (rules calc)
-   formPats = concat $ map (\(prems, conc) -> conc : prems) rulePats
-   forms    = concat $ map (\(ants ::=> sucs) -> ants ++ sucs) formPats
-   ops      = concat $ map formPatOps forms
+calcOps calc = nub $ concat $ map formPatOps (calcFormulaPats calc)
+
+formPatQts :: FormulaPat -> [UniName]
+formPatQts (BinaryOpPat _ f1 f2) = formPatQts f1 ++ formPatQts f2
+formPatQts (QuantPat qt _ f)     = qt : formPatQts f
+formPatQts (NoFreePat _ f)       = formPatQts f
+formPatQts _                     = []
+
+calcQts :: Calculus -> [UniName]
+calcQts calc = nub $ concat $ map formPatQts (calcFormulaPats calc)
 
 --------------------------------------------------------------------------------
 -- | (Partial) derivation of a sequent

@@ -38,3 +38,7 @@ setElt :: Int -> a -> [a] -> [a]
 setElt _ _ [] = []
 setElt 0 x (y:ys) = x : ys
 setElt n x (y:ys) | n > 0 = y : (setElt (n-1) x ys)
+
+pickPair :: Bool -> (a,a) -> a
+pickPair False = fst
+pickPair True  = snd
