@@ -133,7 +133,7 @@ substFormula x t (Quant    qt y f)  | x == y    = Quant qt y f
 -- the f's are true, then one of the g's must be true.
 
 data Sequent = [Formula] :=> [Formula]
-  deriving (Eq)
+  deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 -- | A TermPat is a placeholder for a 'Term'.

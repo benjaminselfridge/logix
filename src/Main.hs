@@ -111,13 +111,16 @@ setTopGoal env arg =
   else case parse (sequent (calculus env) <* end) goalString of
     [] -> do putStrLn $ "Couldn't parse sequent \"" ++ goalString ++ "\"."
              return env
-    [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
-                        return $ env { goal = Stub sequent,
-                                       subgoal = [],
-                                       history = ["top " ++ goalString, "calc " ++ calcName (calculus env)]
-                                       -- clear history because we are starting a new
-                                       -- proof
-                                     }
+    -- TODO: Figure out why there might be multiple parses here (I know why but look
+    -- into fixing it)
+    ((sequent,_):_) -> do
+      putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
+      return $ env { goal = Stub sequent,
+                     subgoal = [],
+                     history = ["top " ++ goalString, "calc " ++ calcName (calculus env)]
+                     -- clear history because we are starting a new
+                     -- proof
+                   }
   where goalString = dropWhile (==' ') arg
 
 listGoals :: Env -> String -> IO Env
