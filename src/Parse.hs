@@ -3,7 +3,7 @@ module Parse where
 import Calculus
 
 import Control.Applicative hiding (many)
--- import Control.Applicative.Alternative
+import Control.Applicative.Alternative hiding (many)
 import Control.Monad
 import Data.Char (isDigit, isAlpha)
 import Data.List
@@ -143,34 +143,37 @@ appTerm = do name <- many1 alphaNum
 -- TODO: finish parsing
 
 formula :: Calculus -> Parser Formula
-formula = undefined -- opFormula <|> baseFormula
+formula calc = asum (map (\op -> opFormula calc op) (calcOps calc)) <|> baseFormula calc
 
-opFormula :: UniName -> Parser Formula
-opFormula (aop, uop) = do a <- baseFormula
-                          spaces
-                          (string aop <|> string uop)
-                          spaces
-                          sf <- formula
-                          return $ Op (aop, uop) a sf
+opFormula :: Calculus -> UniName -> Parser Formula
+opFormula calc op@(UniName (aop, uop)) = do
+  a <- baseFormula calc
+  spaces
+  string aop <|> string uop
+  spaces
+  sf <- formula calc
+  return $ BinaryOp op a sf
 
-baseFormula :: Parser Formula
-baseFormula = paren formula <|>
-              terminalFormula <|>
-              quantFormula
+baseFormula :: Calculus -> Parser Formula
+baseFormula calc = paren (formula calc) <|>
+                   terminalFormula <|>
+                   undefined
+                   -- quantFormula calc
 
 terminalFormula :: Parser Formula
 terminalFormula = predFormula <|> bottomFormula
 
-forallFormula :: Parser Formula
-forallFormula = do string "forall"
-                   char ' '
-                   spaces
-                   x <- many1 alphaNum
-                   spaces
-                   char '.'
-                   spaces
-                   bf <- baseFormula
-                   return $ Forall x bf
+quantFormula :: Calculus -> UniName -> Parser Formula
+quantFormula calc qt@(UniName (aqt, uqt)) = do
+  string aqt <|> string uqt
+  char ' '
+  spaces
+  x <- many1 alphaNum
+  spaces
+  char '.'
+  spaces
+  bf <- baseFormula calc
+  return $ Quant qt x bf
 
 predFormula :: Parser Formula
 predFormula = atomFormula <|> predAppFormula
@@ -189,13 +192,13 @@ bottomFormula = do { string "_|_"; return Bottom }
 --------------------------------------------------------------------------------
 -- Sequents
 
-formulaList :: Parser [Formula]
-formulaList = sepBy (spaces *> char ',' *> spaces) formula
+formulaList :: Calculus -> Parser [Formula]
+formulaList calc = sepBy (spaces *> char ',' *> spaces) (formula calc)
 
-sequent :: Parser Sequent
-sequent = do ants <- formulaList
-             spaces
-             string "=>"
-             spaces
-             sucs <- formulaList
-             return $ ants :=> sucs
+sequent :: Calculus -> Parser Sequent
+sequent calc = do ants <- formulaList calc
+                  spaces
+                  string "=>"
+                  spaces
+                  sucs <- formulaList calc
+                  return $ ants :=> sucs
