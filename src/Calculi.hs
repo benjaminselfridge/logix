@@ -1,9 +1,9 @@
 {-|
 Module      : Sequent
 Description : Package for defining sequent calculi, and for proof checking and
-              generation. 
+              generation.
 Copyright   : (c) Ben Selfridge, 2017
-License     : GPL-3
+License     : BSD3
 Maintainer  : benselfridge@gmail.com
 Stability   : experimental
 
@@ -26,7 +26,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3i, g0c, g0i, g0ip_em, g3ipm, g4ip, hilbert]
+calculi = [g3c, g3i, g0c, g0i, g3ipm, g4ip, hilbert]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -67,10 +67,16 @@ botpat = BottomPat
 
 g3c :: Calculus
 g3c = Calculus {
-  name = "g3c",
+  calcName = "G3c",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
-  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+  [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
+             [gamma] ::=> [delta, a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [delta] ],
             [a $& b, gamma] ::=> [delta]))
   , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
             [a $| b, gamma] ::=> [delta]))
@@ -78,12 +84,6 @@ g3c = Calculus {
              [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
               [botpat, gamma] ::=> [delta]))
-  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
-             [gamma] ::=> [delta, a $> b]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
             [forall_x_a, gamma] ::=> [delta]))
   , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
@@ -96,10 +96,16 @@ g3c = Calculus {
 
 g3cp :: Calculus
 g3cp = Calculus {
-  name = "g3cp",
+  calcName = "G3cp",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
-  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+  [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
+             [gamma] ::=> [delta, a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [delta] ],
             [a $& b, gamma] ::=> [delta]))
   , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
             [a $| b, gamma] ::=> [delta]))
@@ -107,19 +113,13 @@ g3cp = Calculus {
              [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
               [botpat, gamma] ::=> [delta]))
-  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
-             [gamma] ::=> [delta, a $> b]))
   ]}
 
 g3i :: Calculus
 g3i = Calculus {
-  name = "g3i",
+  calcName = "G3i",
   axioms = [("Axiom", [p, gamma] ::=> [p])],
-  rules = 
+  rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
             [gamma] ::=> [a $& b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
@@ -148,9 +148,9 @@ g3i = Calculus {
 
 g3ip :: Calculus
 g3ip = Calculus {
-  name = "g3ip",
+  calcName = "G3ip",
   axioms = [("Axiom", [p, gamma] ::=> [p])],
-  rules = 
+  rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
             [gamma] ::=> [a $& b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
@@ -171,9 +171,9 @@ g3ip = Calculus {
 
 g4ip :: Calculus
 g4ip = Calculus {
-  name = "g4ip",
+  calcName = "G4ip",
   axioms = [("Axiom", [p, gamma] ::=> [p])],
-  rules = 
+  rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
             [gamma] ::=> [a $& b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
@@ -200,7 +200,7 @@ g4ip = Calculus {
 
 g0i :: Calculus
 g0i = Calculus {
-  name = "g0i",
+  calcName = "G0i",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
@@ -235,7 +235,7 @@ g0i = Calculus {
 
 g0ip :: Calculus
 g0ip = Calculus {
-  name = "g0ip",
+  calcName = "G0ip",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
@@ -270,7 +270,7 @@ g0ip = Calculus {
 
 g0c :: Calculus
 g0c = Calculus {
-  name = "g0c",
+  calcName = "G0c",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma'] ::=> [delta', b] ],
@@ -307,7 +307,7 @@ g0c = Calculus {
 
 g0cp :: Calculus
 g0cp = Calculus {
-  name = "g0cp",
+  calcName = "G0cp",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma'] ::=> [delta', b] ],
@@ -334,41 +334,18 @@ g0cp = Calculus {
                 [gamma] ::=> [delta, a]))
   ] }
 
-g0ip_em :: Calculus
-g0ip_em = Calculus {
-  name = "g0ip_em",
-  axioms = [("Axiom", [a] ::=> [a])],
-  rules =
-  [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
-            [gamma, delta] ::=> [a $& b]))
-  , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
-  , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
-  , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
-  , ("L|", ([ [a, gamma] ::=> [c], [b, delta] ::=> [c] ],
-            [a $| b, gamma, delta] ::=> [c]))
-  , ("L->", ([ [gamma] ::=> [a], [b, delta] ::=> [c] ],
-             [a $> b, gamma, delta] ::=> [c]))
-  , ("L_|_", ([],
-              [botpat] ::=> [c]))
-  , ("EM", ([ [p, gamma] ::=> [c], [negpat p, delta] ::=> [c] ],
-            [gamma, delta] ::=> [c]))
-  , ("Wk", ([ [gamma] ::=> [c] ],
-            [a, gamma] ::=> [c]))
-  , ("Ctr", ([ [a, a, gamma] ::=> [c] ],
-             [a, gamma] ::=> [c]))
-  ]}
-
 g3ipm :: Calculus
 g3ipm = Calculus {
-  name = "g3ipm",
+  calcName = "G3ipm",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
-  [ ("L&", ([ [a, b, gamma] ::=> [delta] ],
+  [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+            [gamma] ::=> [delta, a $& b]))
+  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
+            [gamma] ::=> [delta, a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [delta, a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [delta] ],
             [a $& b, gamma] ::=> [delta]))
   , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
             [a $| b, gamma] ::=> [delta]))
@@ -376,18 +353,12 @@ g3ipm = Calculus {
              [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
               [botpat, gamma] ::=> [delta]))
-  , ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [delta, a $> b]))
   ]}
 
 -- Adapted from Kleene, Mathematical Logic.
 hilbert :: Calculus
 hilbert = Calculus {
-  name = "hilbert",
+  calcName = "Hilbert",
   axioms =
   [ ("H1",   [] ::=> [a $> (b $> a)])
   , ("H2",   [] ::=> [(a $> b) $> ((a $> (b $> c)) $> (a $> c))])

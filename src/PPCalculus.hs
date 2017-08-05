@@ -48,11 +48,6 @@ padL n = (unlines . map (replicate n ' '++) . lines)
 
 -- TODO: move all this to PPCalculus.hs
 
-instance Show Term where
-  show (ConstTerm  c) = "_" ++ c
-  show (VarTerm    v) = v
-  show (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map show ts) ++ ")"
-
 -- | Pretty print a formula, with top level parentheses.
 ppFormula' :: Bool -> Formula -> String
 ppFormula' True  Bottom        = "⊥"
@@ -207,7 +202,7 @@ ppFormulaInst' unicode formBindings termBindings (NoFreePat x s) =
   case lookup x termBindings of
     Nothing -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free <" ++ x ++ "> ]"
     Just (VarTerm y) -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free " ++ y ++ "]"
-  
+
 -- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
 -- instantiation.
 

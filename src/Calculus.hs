@@ -1,9 +1,9 @@
 {-|
 Module      : Calculus
-Description : Package for defining sequent calculi, and for proof checking and
-              generation. 
+Description : Package for defining sequent calculi and constructing proofs within
+              them.
 Copyright   : (c) Ben Selfridge, 2017
-License     : GPL-3
+License     : BSD3
 Maintainer  : benselfridge@gmail.com
 Stability   : experimental
 
@@ -29,7 +29,7 @@ module Calculus
   , Calculus(..)
   , instFormulaPat
   , instSequentPat
-  
+
   -- * Pattern matching
   , match
   , matchAll
@@ -47,7 +47,7 @@ module Calculus
   , tryAxiom
   , tryRule
   , checkDerivation
-  
+
   ) where
 
 import Utils
@@ -56,7 +56,7 @@ import Data.List
 import Data.Maybe
 
 -- TODO: There is no real reason to have specific and, or, implies, etc. We can
--- abstract that to generalized connectives with different arities. 
+-- abstract that to generalized connectives with different arities.
 
 --------------------------------------------------------------------------------
 -- | Represents a single term in predicate calculus.
@@ -64,6 +64,13 @@ data Term = ConstTerm String
           | VarTerm   String
           | AppTerm   String [Term]
   deriving (Eq)
+
+-- TODO: remove this show instance, add it to PPCalculus.hs as a ppTerm function, and
+-- add deriving (Show) to the data decl for Term.
+instance Show Term where
+  show (ConstTerm  c) = "_" ++ c
+  show (VarTerm    v) = v
+  show (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map show ts) ++ ")"
 
 --------------------------------------------------------------------------------
 -- | Represents a single formula in predicate calculus.
@@ -74,7 +81,7 @@ data Formula = Bottom
              | Implies Formula Formula
              | Forall String Formula
              | Exists String Formula
-  deriving (Eq)
+  deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 -- substitutions
@@ -118,7 +125,7 @@ substFormula x t (Exists  y f)  | x == y    = Exists y f
 -- | Represents a sequent in a Gentzen-style derivation. Logically, a sequent of the
 -- form
 --
--- > [f1, f2, ..., fn] :=> [g1, g2, ..., gm] 
+-- > [f1, f2, ..., fn] :=> [g1, g2, ..., gm]
 --
 -- means the /conjunction/ of the f's implies the /disjunction/ of the g's, so if all of
 -- the f's are true, then one of the g's must be true.
@@ -147,6 +154,10 @@ data TermPat = VarPat  { termPatId :: String }
 -- whatever the interior pattern is matched too must not contain any free occurences
 -- of a particular variable.
 
+-- TODO: Add another pattern, ConcPredPat, with an explicit /list/ of
+-- TermPats. Figure out how to extend all the matching and instantiation mechanisms
+-- to this, and we will be able to add equality axioms to any calculus.
+
 data FormulaPat = BottomPat
              | AndPat FormulaPat FormulaPat
              | OrPat FormulaPat FormulaPat
@@ -169,13 +180,13 @@ data FormulaPat = BottomPat
 data SequentPat = [FormulaPat] ::=> [FormulaPat]
 
 -- | Pattern for a rule: a list of premises at the top, and a conclusion at the
--- bottom. 
+-- bottom.
 type RulePat = ([SequentPat], SequentPat)
 
 --------------------------------------------------------------------------------
 -- | Map from identifiers to terms.
 
--- | Map from basic patterns to concrete formulas. 
+-- | Map from basic patterns to concrete formulas.
 -- type FormulaAssignment = [(FormulaPat, [Formula])]
 type FormulaAssignment = [(String, [Formula])]
 
@@ -319,7 +330,7 @@ mergeTermAssignments (((n, cs):a1):assigns) = do
     _ -> []
 mergeTermAssignments ([]:assigns) = mergeTermAssignments assigns
 mergeTermAssignments [] = return []
-  
+
 -- | Take a list of patterns and a list of formulas to match, and produce a list
 -- of all satisfying assignments.
 match :: [FormulaPat] -> [Formula] -> [(FormulaAssignment,TermAssignment)]
@@ -419,7 +430,7 @@ matchAll pairs = do
 -- g3ip = Calculus {
 --   name = \"G3ip\",
 --   axioms = [(\"Axiom\", [atom, gamma] ::=> [atom])],
---   rules = 
+--   rules =
 --   [ (\"R&\",   ([ [gamma] ::=> [a],
 --                 [gamma] ::=> [b] ]
 --               , [gamma] ::=> [a $& b]))
@@ -446,9 +457,9 @@ matchAll pairs = do
 --               , [botpat, gamma] ::=> [c]))
 --   ]}
 -- @
-data Calculus = Calculus { name :: String
-                         , axioms :: [(String, SequentPat)]
-                         , rules :: [(String, RulePat)]
+data Calculus = Calculus { calcName :: String
+                         , axioms   :: [(String, SequentPat)]
+                         , rules    :: [(String, RulePat)]
                          }
 
 --------------------------------------------------------------------------------
@@ -502,7 +513,7 @@ stubs :: Derivation -> [(GoalSpec, Sequent)]
 stubs (Stub sequent)       = [([], sequent)]
 stubs (Axiom _ _ _ _)      = []
 stubs (Der   _ _ _ _ ders) = concat $ numberAll 1 $ map stubs ders
-  where 
+  where
     number n (goalSpec, sequent) = (n:goalSpec, sequent)
     numberAll n [] = []
     numberAll n (x:xs) = map (number n) x : numberAll (n+1) xs
@@ -571,7 +582,7 @@ instRule calculus name formBindings termBindings (x:xs) (Der sequent rule fb tb 
   der <- ders !!! (x-1)
   newDer <- instRule calculus name formBindings termBindings xs der
   return $ Der sequent rule fb tb (setElt (x-1) newDer ders)
- 
+
 clearSubgoal :: GoalSpec -> Derivation -> Maybe Derivation
 clearSubgoal [] d = return $ Stub (conclusion d)
 clearSubgoal (i:is) (Der seq rule fb tb ders) = do

@@ -53,14 +53,27 @@ sepBy1 sep p = do a <- p
 
 between l r p = l *> p <* r
 
+(<||>) :: Parser a -> Parser a -> Parser a
+p <||> q = Parser (\cs -> case parse (p <|> q) cs of
+                      (x:_) -> [x]
+                      _     -> [])
+
 --------------------------------------------------------------------------------
 -- Concretes
+
+item :: Parser Char
+item = Parser (\cs -> case cs of
+                  (c:cs') -> [(c,cs')]
+                  _       -> [])
+
+items :: Parser String
+items = many item
 
 char :: Char -> Parser Char
 char c = Parser (\cs -> case cs of
                     (c':cs') | c == c' -> [(c,cs')]
                     _                  -> [])
-  
+
 string :: String -> Parser String
 string s = Parser (\cs -> case stripPrefix s cs of
                       Just cs' -> [(s, cs')]

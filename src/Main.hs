@@ -28,11 +28,15 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: make help more readable by splitting it into sections
+-- TODO: add "up" command to go up one level of the proof tree
+-- TODO: when printing out a particular rule with a NoFreePat (or several), instead
+-- of printing it as [no free], just add a little qualifier string at the end.
 -- TODO: add option to write "rule L&" or whatever, which only displays the
 -- possibilities for L&
 -- TODO: add "assume" command, maintaining a list of formulas as assumptions that get
 -- prepended to every top-level goal. Ultimately want to be able to abbreviate
--- formulas. 
+-- formulas.
 -- TODO: maybe a manual mode, where the user can input the substitution for a
 -- particular rule manually? "use" command might be cool
 -- TODO: "examples" command that spits out examples of how to write formulas
@@ -41,22 +45,22 @@ commands = [ ("help", ("Print all commands.",
                        [],
                        help))
            , ("top", ("Change top-level goal. If given no argument, " ++
-                       " just prints the top-level goal.",
+                       "just prints the top-level goal.",
                        ["<goal>"],
                        setTopGoal))
-           , ("rule", ("Apply a rule to the current subgoal. If given no argument," ++
-                       " just prints all applicable rules.",
+           , ("rule", ("Apply a rule to the current subgoal. If given no argument, " ++
+                       "just prints all applicable rules.",
                        ["<ruleid>"],
                        rule))
-           , ("axiom", ("Apply an axiom to the current subgoal. If given no argument," ++
-                       " just prints all applicable axioms.",
+           , ("axiom", ("Apply an axiom to the current subgoal. If given no argument, " ++
+                       "just prints all applicable axioms.",
                         ["<axiomid>"],
                         axiom))
-           , ("goals", ("List all open subgoals.", 
+           , ("goals", ("List all open subgoals.",
                         [],
                         listGoals))
            , ("goal", ("Change current subgoal. If given no argument, " ++
-                       " just prints the current subgoal.",
+                       "just prints the current subgoal.",
                        ["<subgoal id>"],
                        changeSubgoal))
            , ("history", ("Print out history of all commands you've entered.",
@@ -110,9 +114,9 @@ setTopGoal env arg =
     [(sequent,_)] -> do putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
                         return $ env { goal = Stub sequent,
                                        subgoal = [],
-                                       history = ["top " ++ goalString, "calc " ++ name (calculus env)]
+                                       history = ["top " ++ goalString, "calc " ++ calcName (calculus env)]
                                        -- clear history because we are starting a new
-                                       -- proof 
+                                       -- proof
                                      }
   where goalString = dropWhile (==' ') arg
 
@@ -183,8 +187,7 @@ clear env arg =
                       else case sequence $ map readMaybe (splitOn "." subgoalString) of
                              Just spec -> spec
                              Nothing   -> []
-  
--- TODO: make this prettier
+
 check :: Env -> String -> IO Env
 check env _ = do
   case checkDerivation (calculus env) (goal env) of
@@ -192,7 +195,7 @@ check env _ = do
       putStrLn "Error in subderivation: "
       putStrLn $ ppDerivation (unicode env) d
     Right () -> do
-      putStrLn $ "Valid derivation in " ++ name (calculus env)
+      putStrLn $ "Valid derivation in " ++ calcName (calculus env)
   return env
 
 getFormBindings :: Bool -> [FormulaPat] -> IO FormulaAssignment
@@ -256,7 +259,7 @@ getTermBindings unicode (TermPat t:pats) = do
     [(t',_)] -> do rest <- getTermBindings unicode pats
                    return $ (t, t') : rest
     _ -> error $ "multiple parses for variable term: " ++ show t
-    
+
 getFirstSubgoal :: Derivation -> GoalSpec
 getFirstSubgoal der = case stubs der of
   []          -> []
@@ -313,7 +316,7 @@ rule env arg =
             [prem] ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations: " ++
               ppSequentInst (unicode env) formBinding termBinding prem
-            _      -> 
+            _      ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++
               intercalate "\n     " (map (ppSequentInst (unicode env) formBinding termBinding) prems)
           where Just (prems, _) = lookup name (rules (calculus env))
@@ -385,17 +388,17 @@ toggleUnicode env _ =
 
 changeCalculus :: Env -> String -> IO Env
 changeCalculus env arg =
-  if null calcName
+  if null name
   then do putStrLn $ ppCalculus (unicode env) $ calculus env
           return env
-  else 
-    case find (\calc -> name calc == calcName) calculi of
-      Nothing   -> do putStrLn $ "No calculus named \"" ++ calcName ++ "\"."
+  else
+    case find (\calc -> calcName calc == name) calculi of
+      Nothing   -> do putStrLn $ "No calculus named \"" ++ name ++ "\"."
                       return env
-      Just calc -> do putStrLn $ "Changing calculus to " ++ calcName ++ "."
-                      let newHistory = ("calc " ++ calcName) : (history env)
+      Just calc -> do putStrLn $ "Changing calculus to " ++ name ++ "."
+                      let newHistory = ("calc " ++ name) : (history env)
                       return $ env { calculus = calc, history = newHistory }
-  where calcName = dropWhile (==' ') arg
+  where name = dropWhile (==' ') arg
 
 -- TODO: fix spacing for axiom
 listRule :: Env -> String -> IO Env
@@ -410,7 +413,7 @@ listRule env arg =
   where ruleStr = dropWhile (==' ') arg
 
 listCalculi :: Env -> String -> IO Env
-listCalculi env _ = do mapM_ (\calc -> putStrLn $ name calc) calculi
+listCalculi env _ = do mapM_ (\calc -> putStrLn $ calcName calc) calculi
                        return env
 
 quit :: Env -> String -> IO Env
@@ -433,7 +436,7 @@ repl env = do
 introMessage :: String
 introMessage =
   "LogiX (Logic Explorer) v. " ++ version ++ "\n" ++
-  "interactive proof assistant for sequent calculi\n" ++ 
+  "interactive proof assistant for sequent calculi\n" ++
   "(c) Ben Selfridge 2017\n\n" ++
   "Type \"help\" for a list of commands.\n"
 
@@ -446,5 +449,5 @@ main = do
              , quitFlag = False
              , pretty = True
              , unicode = True
-             , history = ["top => P -> P", "calc " ++ name (head calculi)]
+             , history = ["top => P -> P", "calc " ++ calcName (head calculi)]
              }

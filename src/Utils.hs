@@ -1,9 +1,9 @@
 {-|
 Module      : Utils
 Description : Package for defining sequent calculi, and for proof checking and
-              generation. 
+              generation.
 Copyright   : (c) Ben Selfridge, 2017
-License     : GPL-3
+License     : BSD3
 Maintainer  : benselfridge@gmail.com
 Stability   : experimental
 
