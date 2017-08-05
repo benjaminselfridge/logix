@@ -3,6 +3,7 @@ module Parse where
 import Calculus
 
 import Control.Applicative hiding (many)
+import Control.Applicative.Alternative
 import Control.Monad
 import Data.Char (isDigit, isAlpha)
 import Data.List
@@ -139,65 +140,26 @@ appTerm = do name <- many1 alphaNum
 -- Formulas
 
 -- TODO: add forall a b c. A(a,b,c)
+-- TODO: finish parsing
 
-formula :: Parser Formula
-formula = (iffFormula <|> implSubFormula)
+formula :: Calculus -> Parser Formula
+formula = undefined -- opFormula <|> baseFormula
 
-iffFormula :: Parser Formula
-iffFormula = do impf <- implSubFormula
-                spaces
-                string "<->"
-                spaces
-                f <- formula
-                return $ And (Implies impf f) (Implies f impf)
-
-implSubFormula :: Parser Formula
-implSubFormula = implFormula <|> subFormula
-
-implFormula :: Parser Formula
-implFormula = do sf <- subFormula
-                 spaces
-                 string "->"
-                 spaces
-                 f <- formula
-                 return $ Implies sf f
-
-subFormula :: Parser Formula
-subFormula = andFormula <|>
-             orFormula <|>
-             baseFormula
-
-andFormula :: Parser Formula
-andFormula = do a <- baseFormula
-                spaces
-                char '&'
-                spaces
-                sf <- subFormula
-                return $ And a sf
-
-orFormula :: Parser Formula
-orFormula = do a <- baseFormula
-               spaces
-               char '|'
-               spaces
-               sf <- subFormula
-               return $ Or a sf
+opFormula :: UniName -> Parser Formula
+opFormula (aop, uop) = do a <- baseFormula
+                          spaces
+                          (string aop <|> string uop)
+                          spaces
+                          sf <- formula
+                          return $ Op (aop, uop) a sf
 
 baseFormula :: Parser Formula
 baseFormula = paren formula <|>
               terminalFormula <|>
-              negFormula <|>
-              forallFormula <|>
-              existsFormula
+              quantFormula
 
 terminalFormula :: Parser Formula
 terminalFormula = predFormula <|> bottomFormula
-
-negFormula :: Parser Formula
-negFormula = do char '~'
-                spaces
-                bf <- baseFormula
-                return $ Implies bf Bottom
 
 forallFormula :: Parser Formula
 forallFormula = do string "forall"
@@ -209,17 +171,6 @@ forallFormula = do string "forall"
                    spaces
                    bf <- baseFormula
                    return $ Forall x bf
-
-existsFormula :: Parser Formula
-existsFormula = do string "exists"
-                   char ' '
-                   spaces
-                   x <- many1 alphaNum
-                   spaces
-                   char '.'
-                   spaces
-                   bf <- baseFormula
-                   return $ Exists x bf
 
 predFormula :: Parser Formula
 predFormula = atomFormula <|> predAppFormula

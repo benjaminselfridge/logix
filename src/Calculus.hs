@@ -27,6 +27,7 @@ module Calculus
   , FormulaAssignment
   , TermAssignment
   , Calculus(..)
+  , calcOps
   , instFormulaPat
   , instSequentPat
 
@@ -74,13 +75,19 @@ instance Show Term where
 
 --------------------------------------------------------------------------------
 -- | Represents a single formula in predicate calculus.
+
+newtype UniName = UniName { getNames :: (String, String)
+                            -- ^ first is ASCII, second is Unicode
+                          }
+  deriving (Eq, Show)
+
 data Formula = Bottom
              | Pred String [Term]
-             | And Formula Formula
-             | Or Formula Formula
-             | Implies Formula Formula
-             | Forall String Formula
-             | Exists String Formula
+             | BinaryOp UniName Formula Formula
+             -- ^ first arg is the name for the op
+             | Quant UniName String Formula
+             -- ^ first arg is the name for the quantifier, second is the name of the
+             -- variable
   deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
@@ -95,13 +102,10 @@ termVars (AppTerm _ ts) = [ v | t <- ts, v <- termVars t ]
 -- | All the free variables in a formula.
 freeVars :: Formula -> [String]
 freeVars = nub . freeVars' where
-  freeVars' Bottom = []
-  freeVars' (Pred _ ts)   = [ v | t <- ts, v <- termVars t ]
-  freeVars' (And     f g) = freeVars' f ++ freeVars' g
-  freeVars' (Or      f g) = freeVars' f ++ freeVars' g
-  freeVars' (Implies f g) = freeVars' f ++ freeVars' g
-  freeVars' (Forall  x f) = [ v | v <- freeVars' f, v /= x ]
-  freeVars' (Exists  x f) = [ v | v <- freeVars' f, v /= x ]
+  freeVars' Bottom           = []
+  freeVars' (Pred _ ts)      = [ v | t <- ts, v <- termVars t ]
+  freeVars' (BinaryOp _ f g) = freeVars' f ++ freeVars' g
+  freeVars' (Quant    _ x f) = [ v | v <- freeVars' f, v /= x ]
 
 -- | Substitute a variable for a term inside a larger term.
 substTerm :: String -> Term -> Term -> Term
@@ -111,15 +115,11 @@ substTerm _ _ term = term
 
 -- | Substitute a variable for a term inside a formula.
 substFormula :: String -> Term -> Formula -> Formula
-substFormula _ _ Bottom         = Bottom
-substFormula x t (Pred    p ts) = Pred p $ map (substTerm x t) ts
-substFormula x t (And     f g)  = And     (substFormula x t f) (substFormula x t g)
-substFormula x t (Or      f g)  = Or      (substFormula x t f) (substFormula x t g)
-substFormula x t (Implies f g)  = Implies (substFormula x t f) (substFormula x t g)
-substFormula x t (Forall  y f)  | x == y    = Forall y f
-                                | otherwise = Forall y (substFormula x t f)
-substFormula x t (Exists  y f)  | x == y    = Exists y f
-                                | otherwise = Exists y (substFormula x t f)
+substFormula _ _ Bottom             = Bottom
+substFormula x t (Pred    p ts)     = Pred p $ map (substTerm x t) ts
+substFormula x t (BinaryOp op f g)  = BinaryOp op (substFormula x t f) (substFormula x t g)
+substFormula x t (Quant    qt y f)  | x == y    = Quant qt y f
+                                    | otherwise = Quant qt y (substFormula x t f)
 
 --------------------------------------------------------------------------------
 -- | Represents a sequent in a Gentzen-style derivation. Logically, a sequent of the
@@ -159,20 +159,22 @@ data TermPat = VarPat  { termPatId :: String }
 -- to this, and we will be able to add equality axioms to any calculus.
 
 data FormulaPat = BottomPat
-             | AndPat FormulaPat FormulaPat
-             | OrPat FormulaPat FormulaPat
-             | ImpliesPat FormulaPat FormulaPat
-             | ForallPat String FormulaPat
-             | ExistsPat String FormulaPat
-             | PredPat String
-             | FormPat String
-             -- ^ an /arbitrary/ formula
-             | SetPat String
-             -- ^ a /list/ of arbitrary formulas
-             | SubstPat String TermPat String
-             -- ^ substitute arg1 with arg2 in arg3
-             | NoFreePat String FormulaPat
-             -- ^ arg2 with no free variables matching arg1
+                | BinaryOpPat UniName FormulaPat FormulaPat
+                -- ^ General binary connective. The UniName is the name for the
+                -- operator, which provides both an ASCII and Unicode variant.
+                | QuantPat UniName String FormulaPat
+                -- ^ General quantifier. The UniName is the name for the operator, which
+                -- provides both an ASCII and Unicode variant.
+                | PredPat String
+                -- ^ Matches any atomic predicate or propositional variable.
+                | FormPat String
+                -- ^ Matches an /arbitrary/ formula
+                | SetPat String
+                -- ^ a /list/ of arbitrary formulas
+                | SubstPat String TermPat String
+                -- ^ substitute arg1 with arg2 in arg3
+                | NoFreePat String FormulaPat
+                -- ^ arg2 with no free variables matching arg1
   deriving (Eq)
 
 --------------------------------------------------------------------------------
@@ -209,21 +211,10 @@ tryFormula formBindings termBindings (SetPat p) =
   case lookup p formBindings of
     Nothing -> ([SetPat p], [])
     Just _  -> ([], [])
-tryFormula formBindings termBindings (AndPat s t) = (sForms ++ tForms, sTerms ++ tTerms) where
+tryFormula formBindings termBindings (BinaryOpPat _ s t) = (sForms ++ tForms, sTerms ++ tTerms) where
   (sForms, sTerms) = tryFormula formBindings termBindings s
   (tForms, tTerms) = tryFormula formBindings termBindings t
-tryFormula formBindings termBindings (OrPat s t) = (sForms ++ tForms, sTerms ++ tTerms) where
-  (sForms, sTerms) = tryFormula formBindings termBindings s
-  (tForms, tTerms) = tryFormula formBindings termBindings t
-tryFormula formBindings termBindings (ImpliesPat s t) = (sForms ++ tForms, sTerms ++ tTerms) where
-  (sForms, sTerms) = tryFormula formBindings termBindings s
-  (tForms, tTerms) = tryFormula formBindings termBindings t
-tryFormula formBindings termBindings (ForallPat x s) = (sForms, xTerms ++ sTerms) where
-  (sForms, sTerms) = tryFormula formBindings termBindings s
-  xTerms = case lookup x termBindings of
-    Nothing -> [VarPat x]
-    Just _  -> []
-tryFormula formBindings termBindings (ExistsPat x s) = (sForms, xTerms ++ sTerms) where
+tryFormula formBindings termBindings (QuantPat _ x s) = (sForms, xTerms ++ sTerms) where
   (sForms, sTerms) = tryFormula formBindings termBindings s
   xTerms = case lookup x termBindings of
     Nothing -> [VarPat x]
@@ -254,27 +245,15 @@ instFormulaPat _            _ BottomPat   = return [Bottom]
 instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
 instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
 instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
-instFormulaPat formBindings termBindings (AndPat s t) = do
+instFormulaPat formBindings termBindings (BinaryOpPat op s t) = do
   sB <- instFormulaPat formBindings termBindings s
   tB <- instFormulaPat formBindings termBindings t
-  return [And a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (OrPat s t) = do
-  sB <- instFormulaPat formBindings termBindings s
-  tB <- instFormulaPat formBindings termBindings t
-  return [Or a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (ImpliesPat s t) = do
-  sB <- instFormulaPat formBindings termBindings s
-  tB <- instFormulaPat formBindings termBindings t
-  return [Implies a b | a <- sB, b <- tB]
-instFormulaPat formBindings termBindings (ForallPat x s) = do
+  return [BinaryOp op a b | a <- sB, b <- tB]
+instFormulaPat formBindings termBindings (QuantPat qt x s) = do
   -- TODO: check that this doesn't blow up if x doesn't map to a variable
   VarTerm y <- lookup x termBindings
   sB <- instFormulaPat formBindings termBindings s
-  return [Forall y a | a <- sB]
-instFormulaPat formBindings termBindings (ExistsPat x s) = do
-  VarTerm y <- lookup x termBindings
-  sB <- instFormulaPat formBindings termBindings s
-  return [Exists y a | a <- sB]
+  return [Quant qt y a | a <- sB]
 instFormulaPat formBindings termBindings (SubstPat x t s) = do
   VarTerm y <- lookup x termBindings
   let tId = termPatId t
@@ -338,37 +317,17 @@ match (BottomPat:pats) fs =
   [matchRest | Bottom    <- nub fs
              , fs'       <- [delete Bottom fs]
              , matchRest <- match pats fs']
-match ((AndPat pat1 pat2):pats) fs =
-  [(mergeForms, matchTerms) | And c1 c2 <- nub fs
+match ((BinaryOpPat op pat1 pat2):pats) fs =
+  [(mergeForms, matchTerms) | BinaryOp op c1 c2 <- nub fs
                             , (c1Forms, c1Terms) <- match [pat1] [c1]
                             , (c2Forms, c2Terms) <- match [pat2] [c2]
-                            , (matchForms, matchTerms) <- match pats (delete (And c1 c2) fs)
+                            , (matchForms, matchTerms) <- match pats (delete (BinaryOp op c1 c2) fs)
                             , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
                             , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
-match ((OrPat pat1 pat2):pats) fs =
-  [(mergeForms, matchTerms) | Or c1 c2 <- nub fs
-                            , (c1Forms, c1Terms) <- match [pat1] [c1]
-                            , (c2Forms, c2Terms) <- match [pat2] [c2]
-                            , (matchForms, matchTerms) <- match pats (delete (Or c1 c2) fs)
-                            , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
-                            , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
-match ((ImpliesPat pat1 pat2):pats) fs =
-  [(mergeForms, matchTerms) | Implies c1 c2 <- nub fs
-                            , (c1Forms, c1Terms) <- match [pat1] [c1]
-                            , (c2Forms, c2Terms) <- match [pat2] [c2]
-                            , (matchForms, matchTerms) <- match pats (delete (Implies c1 c2) fs)
-                            , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
-                            , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
-match ((ForallPat x pat):pats) fs =
-  [(mergeForms, mergeTerms) | Forall y f <- nub fs
+match ((QuantPat qt x pat):pats) fs =
+  [(mergeForms, mergeTerms) | Quant qt y f <- nub fs
                             , (fForms, fTerms) <- match [pat] [f]
-                            , (matchForms, matchTerms) <- match pats (delete (Forall y f) fs)
-                            , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
-                            , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
-match ((ExistsPat x pat):pats) fs =
-  [(mergeForms, mergeTerms) | Exists y f <- nub fs
-                            , (fForms, fTerms) <- match [pat] [f]
-                            , (matchForms, matchTerms) <- match pats (delete (Exists y f) fs)
+                            , (matchForms, matchTerms) <- match pats (delete (Quant qt y f) fs)
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
 match ((PredPat p):pats) fs =
@@ -461,6 +420,10 @@ data Calculus = Calculus { calcName :: String
                          , axioms   :: [(String, SequentPat)]
                          , rules    :: [(String, RulePat)]
                          }
+
+-- TODO: extract all ops in a calculus for parsing
+calcOps :: Calculus -> [UniName]
+calcOps calc = undefined
 
 --------------------------------------------------------------------------------
 -- | (Partial) derivation of a sequent
