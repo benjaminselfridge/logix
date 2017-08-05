@@ -20,6 +20,7 @@ module Calculus
     Term(..)
   , TermPat(..)
   , Formula(..)
+  , UniName(..)
   , FormulaPat(..)
   , Sequent(..)
   , SequentPat(..)
@@ -421,9 +422,19 @@ data Calculus = Calculus { calcName :: String
                          , rules    :: [(String, RulePat)]
                          }
 
--- TODO: extract all ops in a calculus for parsing
+-- TODO: extract all ops in a calculus for parsing (no nub)
+formPatOps :: FormulaPat -> [UniName]
+formPatOps (BinaryOpPat op f1 f2) = op : (formPatOps f1 ++ formPatOps f2)
+formPatOps (QuantPat op _ f)      = op : formPatOps f
+formPatOps (NoFreePat _ f)        = formPatOps f
+formPatOps _                      = []
+
 calcOps :: Calculus -> [UniName]
-calcOps calc = undefined
+calcOps calc = nub ops where
+   rulePats = map snd (rules calc)
+   formPats = concat $ map (\(prems, conc) -> conc : prems) rulePats
+   forms    = concat $ map (\(ants ::=> sucs) -> ants ++ sucs) formPats
+   ops      = concat $ map formPatOps forms
 
 --------------------------------------------------------------------------------
 -- | (Partial) derivation of a sequent

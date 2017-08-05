@@ -3,7 +3,7 @@ module Parse where
 import Calculus
 
 import Control.Applicative hiding (many)
-import Control.Applicative.Alternative
+-- import Control.Applicative.Alternative
 import Control.Monad
 import Data.Char (isDigit, isAlpha)
 import Data.List
