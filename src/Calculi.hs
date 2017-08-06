@@ -14,6 +14,11 @@ customize the software.
 
 module Calculi
   ( calculi
+  , g0c
+  , g0i
+  , g3c
+  , g3i
+  , g4ip
   , andForm
   , orForm
   , impliesForm
@@ -87,7 +92,7 @@ nofree_y = NoFreePat "y"
 ($<>) = \a b -> (impliesPat a b $& impliesPat b a)
 
 -- | Bottom pattern.
-botpat = BottomPat
+botpat = ZeroaryOpPat (UniName ("_|_", "⊥"))
 
 g3c :: Calculus
 g3c = Calculus {

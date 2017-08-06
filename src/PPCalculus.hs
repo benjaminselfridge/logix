@@ -53,10 +53,9 @@ sq = UniName ("=>","⇒")
 
 -- | Pretty print a formula, with top level parentheses.
 ppFormula' :: Bool -> Formula -> String
-ppFormula' True  Bottom        = "⊥"
-ppFormula' False Bottom        = "_|_"
 ppFormula' unicode (Pred p [])   = p
 ppFormula' unicode (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
+ppFormula' unicode (ZeroaryOp op)    = pickPair unicode (getNames op)
 ppFormula' unicode (BinaryOp op a b) =
   "(" ++ ppFormula' unicode a ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
@@ -84,11 +83,10 @@ ppSequent unicode (ants :=> sucs) = intercalate ", " (map (ppFormula unicode)  a
 
 -- | Pretty print a formula pattern, with top level parentheses.
 ppFormulaPat' :: Bool -> FormulaPat -> String
-ppFormulaPat' True    (BottomPat) = "⊥"
-ppFormulaPat' False   (BottomPat) = "_|_"
 ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
 ppFormulaPat' unicode (SetPat gamma) = gamma
+ppFormulaPat' unicode (ZeroaryOpPat op) = pickPair unicode (getNames op)
 ppFormulaPat' unicode (BinaryOpPat op s t) =
   "(" ++ ppFormulaPat' unicode s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
@@ -114,8 +112,6 @@ ppSequentPat unicode (ants ::=> sucs) =
 
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
 ppFormulaInst' :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
-ppFormulaInst' True  formBindings termBindings BottomPat = "⊥"
-ppFormulaInst' False formBindings termBindings BottomPat = "_|_"
 ppFormulaInst' unicode formBindings termBindings (PredPat p) = case lookup p formBindings of
   Nothing  -> "<" ++ p ++ ">" -- p is unbound
   Just [f] -> ppFormula' unicode f
@@ -127,9 +123,10 @@ ppFormulaInst' unicode formBindings termBindings (FormPat a) = case lookup a for
 ppFormulaInst' unicode formBindings termBindings (SetPat g) = case lookup g formBindings of
   Nothing -> "<" ++ g ++ ">"
   Just fs -> ppFormulaList unicode fs -- show the formulas
-ppFormulaInst' unicode formBindings termBindings (BinaryOpPat qt s t) =
+ppFormulaInst' unicode formBindings termBindings (ZeroaryOpPat op) = pickPair unicode (getNames op)
+ppFormulaInst' unicode formBindings termBindings (BinaryOpPat op s t) =
   "(" ++ ppFormulaInst' unicode formBindings termBindings s ++
-  " " ++ pickPair unicode (getNames qt) ++ " " ++
+  " " ++ pickPair unicode (getNames op) ++ " " ++
   ppFormulaInst' unicode formBindings termBindings t ++ ")"
 ppFormulaInst' unicode formBindings termBindings (QuantPat qt x s) =
   pickPair unicode (getNames qt) ++

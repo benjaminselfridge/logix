@@ -143,7 +143,7 @@ appTerm = do name <- many1 alphaNum
 -- TODO: finish parsing
 
 formula :: Calculus -> Parser Formula
-formula calc = asum (map (\op -> opFormula calc op) (calcOps calc)) <|> baseFormula calc
+formula calc = asum (map (\op -> opFormula calc op) (calcBinaryOps calc)) <|> baseFormula calc
 
 opFormula :: Calculus -> UniName -> Parser Formula
 opFormula calc op@(UniName (aop, uop)) = do
@@ -156,16 +156,16 @@ opFormula calc op@(UniName (aop, uop)) = do
 
 baseFormula :: Calculus -> Parser Formula
 baseFormula calc = paren (formula calc) <|>
-                   terminalFormula <|>
+                   terminalFormula calc <|>
                    asum (map (\qt -> quantFormula calc qt) (calcQts calc))
 
-terminalFormula :: Parser Formula
-terminalFormula = predFormula <|> bottomFormula
+terminalFormula :: Calculus -> Parser Formula
+terminalFormula calc = predFormula <|>
+                       asum (map (\op -> zeroaryFormula op) (calcZeroaryOps calc))
 
 quantFormula :: Calculus -> UniName -> Parser Formula
 quantFormula calc qt@(UniName (aqt, uqt)) = do
   string aqt <|> string uqt
-  char ' '
   spaces
   x <- many1 alphaNum
   spaces
@@ -175,7 +175,7 @@ quantFormula calc qt@(UniName (aqt, uqt)) = do
   return $ Quant qt x bf
 
 predFormula :: Parser Formula
-predFormula = atomFormula <|> predAppFormula
+predFormula = predAppFormula <|> atomFormula
 
 atomFormula :: Parser Formula
 atomFormula = do { name <- many1 alphaNum; return $ Pred name [] }
@@ -185,8 +185,10 @@ predAppFormula = do name <- many1 alphaNum
                     terms <- paren termList
                     return $ Pred name terms
 
-bottomFormula :: Parser Formula
-bottomFormula = do { string "_|_"; return Bottom }
+zeroaryFormula :: UniName -> Parser Formula
+zeroaryFormula op@(UniName (aqt, uqt))  = do
+  string aqt <|> string uqt
+  return $ ZeroaryOp op
 
 --------------------------------------------------------------------------------
 -- Sequents
