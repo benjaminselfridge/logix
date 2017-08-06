@@ -44,14 +44,14 @@ calculi = [g0c, g0i, g3c, g3i, g4ip]
 -- formula connectives
 andForm     = BinaryOp (UniName ("&","&"))
 orForm      = BinaryOp (UniName ("|","∨"))
-impliesForm = BinaryOp (UniName ("->","→"))
+impliesForm = BinaryOp (UniName ("->","⊃"))
 forallForm  = Quant (UniName ("forall ","∀"))
 existsForm  = Quant (UniName ("exists ","∃"))
 
 -- connective patterns
 andPat     = BinaryOpPat (UniName ("&","&"))
 orPat      = BinaryOpPat (UniName ("|","∨"))
-impliesPat = BinaryOpPat (UniName ("->","→"))
+impliesPat = BinaryOpPat (UniName ("->","⊃"))
 forallPat  = QuantPat (UniName ("forall ","∀"))
 existsPat  = QuantPat (UniName ("exists ","∃"))
 

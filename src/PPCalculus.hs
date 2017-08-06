@@ -155,12 +155,18 @@ ppFormulaInst' unicode formBindings termBindings (NoFreePat x s) =
 -- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
 -- instantiation.
 
--- TODO: If A -> B is bound to P -> _|_, this prints out P -> _|_ instead of ~P.
+-- TODO: Add another case for FormPat, NoFreePat and SubstPat, where we look up the
+-- binding. NoFreePat and SubstPat should call the non-quoted ppFormulaInst recursively.
 ppFormulaInst :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
 ppFormulaInst unicode formBindings termBindings (BinaryOpPat op s t) =
   ppFormulaInst' unicode formBindings termBindings s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
   ppFormulaInst' unicode formBindings termBindings t
+ppFormulaInst unicode formBindings termBindings (FormPat a) =
+  case lookup a formBindings of
+    Nothing   -> "<" ++ a ++ ">"
+    Just [f]  -> ppFormula unicode f
+    _         -> error "ppFormulaInst: variable bound to multiple formulas"
 ppFormulaInst unicode formBindings termBindings pat = ppFormulaInst' unicode formBindings termBindings pat
 
 -- | Given a (possibly incomplete) assignment and a sequent pattern, pretty print the
