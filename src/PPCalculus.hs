@@ -51,32 +51,42 @@ padL n = (unlines . map (replicate n ' '++) . lines)
 
 sq = UniName ("=>","⇒")
 
+-- TODO: pretty print abbreviated. modify ppFormula, ppFormulaList, ppSequent for
+-- now. Later, think about how to do patterns.
+
 -- | Pretty print a formula, with top level parentheses.
-ppFormula' :: Bool -> Formula -> String
-ppFormula' unicode (Pred p [])   = p
-ppFormula' unicode (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
-ppFormula' unicode (ZeroaryOp op)    = pickPair unicode (getNames op)
-ppFormula' unicode (BinaryOp op a b) =
-  "(" ++ ppFormula' unicode a ++
+ppFormula' :: Bool -> Calculus -> Formula -> String
+ppFormula' unicode calc f
+  | Just (uAbbrev, f') <- uAbbreviateForm calc f =
+      pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula' unicode calc f'
+ppFormula' unicode calc (Pred p [])   = p
+ppFormula' unicode calc (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
+ppFormula' unicode calc (ZeroaryOp op)    = pickPair unicode (getNames op)
+ppFormula' unicode calc (BinaryOp op a b) =
+  "(" ++ ppFormula' unicode calc a ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
-  ppFormula' unicode b ++ ")"
-ppFormula' unicode (Quant qt x a) = pickPair unicode (getNames qt) ++ x ++ "." ++ ppFormula' unicode a
+  ppFormula' unicode calc b ++ ")"
+ppFormula' unicode calc (Quant qt x a) =
+  pickPair unicode (getNames qt) ++ x ++ "." ++ ppFormula' unicode calc a
 
 -- | Pretty print a formula, omitting top level parentheses.
-ppFormula :: Bool -> Formula -> String
-ppFormula unicode (BinaryOp op a b) =
-  ppFormula' unicode a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ ppFormula' unicode b
-ppFormula unicode formula = ppFormula' unicode formula
+ppFormula :: Bool -> Calculus -> Formula -> String
+ppFormula unicode calc f
+  | Just (uAbbrev, f') <- uAbbreviateForm calc f =
+      pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula unicode calc f'
+ppFormula unicode calc (BinaryOp op a b) =
+  ppFormula' unicode calc a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ ppFormula' unicode calc b
+ppFormula unicode calc formula = ppFormula' unicode calc formula
 
 -- | Pretty print a list of formulas.
-ppFormulaList :: Bool -> [Formula] -> String
-ppFormulaList unicode = intercalate ", " . map (ppFormula unicode)
+ppFormulaList :: Bool -> Calculus -> [Formula] -> String
+ppFormulaList unicode calc = intercalate ", " . map (ppFormula unicode calc)
 
 -- | Pretty print a sequent.
-ppSequent :: Bool -> Sequent -> String
-ppSequent unicode (ants :=> sucs) = intercalate ", " (map (ppFormula unicode)  ants) ++
-                                    " " ++ pickPair unicode (getNames sq) ++ " " ++
-                                    intercalate ", " (map (ppFormula unicode)  sucs)
+ppSequent :: Bool -> Calculus -> Sequent -> String
+ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicode calc) ants) ++
+                                         " " ++ pickPair unicode (getNames sq) ++ " " ++
+                                         intercalate ", " (map (ppFormula unicode calc) sucs)
 
 -- TODO: g3i, top => ~exists x.P(x) -> forall x.~P(x) leads to a presentation of ~ as
 -- -> _|_.
@@ -92,7 +102,7 @@ ppFormulaPat' unicode (BinaryOpPat op s t) =
   " " ++ pickPair unicode (getNames op) ++ " " ++
   ppFormulaPat' unicode t ++ ")"
 ppFormulaPat' unicode (QuantPat qt x s) =
-  pickPair unicode (getNames qt) ++ x ++ ".(" ++ ppFormulaPat' unicode  s ++ ")"
+  pickPair unicode (getNames qt) ++ x ++ ".(" ++ ppFormulaPat' unicode s ++ ")"
 ppFormulaPat' unicode (SubstPat x t a) = a ++ "(" ++ termPatId t ++ "/" ++ x ++ ")"
 ppFormulaPat' unicode (NoFreePat x s) = ppFormulaPat' unicode s ++ "[no free " ++ x ++ "]"
 
@@ -111,29 +121,29 @@ ppSequentPat unicode (ants ::=> sucs) =
   intercalate ", " (map (ppFormulaPat True)  sucs)
 
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
-ppFormulaInst' :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
-ppFormulaInst' unicode formBindings termBindings (PredPat p) = case lookup p formBindings of
+ppFormulaInst' :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
+ppFormulaInst' unicode calc formBindings termBindings (PredPat p) = case lookup p formBindings of
   Nothing  -> "<" ++ p ++ ">" -- p is unbound
-  Just [f] -> ppFormula' unicode f
-  Just fs  -> error $ "atom variable " ++ p ++ " bound to " ++ ppFormulaList unicode fs
-ppFormulaInst' unicode formBindings termBindings (FormPat a) = case lookup a formBindings of
+  Just [f] -> ppFormula' unicode calc f
+  Just fs  -> error $ "atom variable " ++ p ++ " bound to " ++ ppFormulaList unicode calc fs
+ppFormulaInst' unicode calc formBindings termBindings (FormPat a) = case lookup a formBindings of
   Nothing  -> "<" ++ a ++ ">"
-  Just [f] -> ppFormula' unicode f
-  Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ ppFormulaList unicode fs
-ppFormulaInst' unicode formBindings termBindings (SetPat g) = case lookup g formBindings of
+  Just [f] -> ppFormula' unicode calc f
+  Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ ppFormulaList unicode calc fs
+ppFormulaInst' unicode calc formBindings termBindings (SetPat g) = case lookup g formBindings of
   Nothing -> "<" ++ g ++ ">"
-  Just fs -> ppFormulaList unicode fs -- show the formulas
-ppFormulaInst' unicode formBindings termBindings (ZeroaryOpPat op) = pickPair unicode (getNames op)
-ppFormulaInst' unicode formBindings termBindings (BinaryOpPat op s t) =
-  "(" ++ ppFormulaInst' unicode formBindings termBindings s ++
+  Just fs -> ppFormulaList unicode calc fs -- show the formulas
+ppFormulaInst' unicode calc formBindings termBindings (ZeroaryOpPat op) = pickPair unicode (getNames op)
+ppFormulaInst' unicode calc formBindings termBindings (BinaryOpPat op s t) =
+  "(" ++ ppFormulaInst' unicode calc formBindings termBindings s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
-  ppFormulaInst' unicode formBindings termBindings t ++ ")"
-ppFormulaInst' unicode formBindings termBindings (QuantPat qt x s) =
+  ppFormulaInst' unicode calc formBindings termBindings t ++ ")"
+ppFormulaInst' unicode calc formBindings termBindings (QuantPat qt x s) =
   pickPair unicode (getNames qt) ++
   case lookup x termBindings of
-    Nothing          -> "<" ++  x ++ ">." ++ ppFormulaInst' unicode formBindings termBindings s
-    Just (VarTerm y) -> y ++ "." ++ ppFormulaInst' unicode formBindings termBindings s
-ppFormulaInst' unicode formBindings termBindings (SubstPat x t s) =
+    Nothing          -> "<" ++  x ++ ">." ++ ppFormulaInst' unicode calc formBindings termBindings s
+    Just (VarTerm y) -> y ++ "." ++ ppFormulaInst' unicode calc formBindings termBindings s
+ppFormulaInst' unicode calc formBindings termBindings (SubstPat x t s) =
   let xStr = case lookup x termBindings of
                Nothing -> "<" ++ x ++ ">"
                Just (VarTerm y) -> y
@@ -142,37 +152,37 @@ ppFormulaInst' unicode formBindings termBindings (SubstPat x t s) =
                Just t' -> show t'
       sStr = case lookup s formBindings of
                Nothing -> "<" ++ s ++ ">"
-               Just s' -> ppFormulaList unicode s'
+               Just s' -> ppFormulaList unicode calc s'
   in sStr ++ "(" ++ tStr ++ "/" ++ xStr ++ ")"
-ppFormulaInst' unicode formBindings termBindings (NoFreePat x s) =
+ppFormulaInst' unicode calc formBindings termBindings (NoFreePat x s) =
   case lookup x termBindings of
-    Nothing -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free <" ++ x ++ "> ]"
-    Just (VarTerm y) -> ppFormulaInst' unicode formBindings termBindings s ++ "[no free " ++ y ++ "]"
+    Nothing -> ppFormulaInst' unicode calc formBindings termBindings s ++ "[no free <" ++ x ++ "> ]"
+    Just (VarTerm y) -> ppFormulaInst' unicode calc formBindings termBindings s ++ "[no free " ++ y ++ "]"
 
 -- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
 -- instantiation.
 
 -- TODO: Add another case for FormPat, NoFreePat and SubstPat, where we look up the
 -- binding. NoFreePat and SubstPat should call the non-quoted ppFormulaInst recursively.
-ppFormulaInst :: Bool -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
-ppFormulaInst unicode formBindings termBindings (BinaryOpPat op s t) =
-  ppFormulaInst' unicode formBindings termBindings s ++
+ppFormulaInst :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
+ppFormulaInst unicode calc formBindings termBindings (BinaryOpPat op s t) =
+  ppFormulaInst' unicode calc formBindings termBindings s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
-  ppFormulaInst' unicode formBindings termBindings t
-ppFormulaInst unicode formBindings termBindings (FormPat a) =
+  ppFormulaInst' unicode calc formBindings termBindings t
+ppFormulaInst unicode calc formBindings termBindings (FormPat a) =
   case lookup a formBindings of
     Nothing   -> "<" ++ a ++ ">"
-    Just [f]  -> ppFormula unicode f
+    Just [f]  -> ppFormula unicode calc f
     _         -> error "ppFormulaInst: variable bound to multiple formulas"
-ppFormulaInst unicode formBindings termBindings pat = ppFormulaInst' unicode formBindings termBindings pat
+ppFormulaInst unicode calc formBindings termBindings pat = ppFormulaInst' unicode calc formBindings termBindings pat
 
 -- | Given a (possibly incomplete) assignment and a sequent pattern, pretty print the
 -- instantiation.
-ppSequentInst :: Bool -> FormulaAssignment -> TermAssignment -> SequentPat -> String
-ppSequentInst unicode formBindings termBindings (ants ::=> sucs) =
-  intercalate ", " (filter (not . null) (map (ppFormulaInst unicode formBindings termBindings) ants)) ++
+ppSequentInst :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> SequentPat -> String
+ppSequentInst unicode calc formBindings termBindings (ants ::=> sucs) =
+  intercalate ", " (filter (not . null) (map (ppFormulaInst unicode calc formBindings termBindings) ants)) ++
   " " ++ pickPair unicode (getNames sq) ++ " " ++
-  intercalate ", " (filter (not . null) (map (ppFormulaInst unicode formBindings termBindings) sucs))
+  intercalate ", " (filter (not . null) (map (ppFormulaInst unicode calc formBindings termBindings) sucs))
 
 -- | Pretty print a rule pattern.
 ppRulePat :: Bool -> String -> (String, RulePat) -> String
@@ -206,7 +216,7 @@ contexts _ = []
 -- TODO: add variables and terms to the "where" clause
 -- TODO: display "NoFree" patterns more elegantly, maybe with some kind of footnote.
 ppCalculus :: Bool -> Calculus -> String
-ppCalculus unicode (Calculus name axioms rules) =
+ppCalculus unicode (Calculus name axioms rules abbrevs) =
   "Calculus " ++ name ++ ".\n\n" ++
   "Axioms:\n" ++ concat (map showAxiom axioms) ++ "\n" ++
   "Rules:\n\n" ++ concat (map showRule rules) ++
@@ -265,14 +275,14 @@ ppGoalSpec [] = "top"
 ppGoalSpec gs = intercalate "." (map show gs)
 
 -- | \"Pretty\" print a derivation.
-ppDerivation :: Bool -> Derivation -> String
-ppDerivation unicode = ppDerivation' unicode "" [] where
+ppDerivation :: Bool -> Calculus -> Derivation -> String
+ppDerivation unicode calc = ppDerivation' unicode "" [] where
   ppDerivation' unicode pad spec (Stub conclusion) =
-    pad ++ ppSequent unicode conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
+    pad ++ ppSequent unicode calc conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' unicode pad spec (Axiom conclusion axiom _ _) =
-    pad ++ ppSequent unicode conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
+    pad ++ ppSequent unicode calc conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' unicode pad spec (Der conclusion rule _ _ premises) =
-    pad ++ ppSequent unicode conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
+    pad ++ ppSequent unicode calc conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
     (concat $ ppPremises spec 1 premises)
     where ppPremises spec n [] = []
           ppPremises spec n (prem:prems) =
@@ -281,18 +291,18 @@ ppDerivation unicode = ppDerivation' unicode "" [] where
 -- Pretty printing a derivation
 -- TODO: put an asterisk at the current subgoal
 -- TODO: maybe move some of these printing functions to a separate file (Main?)
-ppDerivationTree' :: Bool -> GoalSpec -> Derivation -> GoalSpec -> String
-ppDerivationTree' unicode subgoal (Stub conclusion) spec =
-  ppSequent unicode conclusion ++ if spec == subgoal then "*\n" else "\n"
-ppDerivationTree' unicode subgoal (Axiom conclusion axiom _ _) spec =
-  "[" ++ ppSequent unicode conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
-ppDerivationTree' unicode subgoal (Der conclusion rule _ _ ders) spec =
+ppDerivationTree' :: Bool -> Calculus -> GoalSpec -> Derivation -> GoalSpec -> String
+ppDerivationTree' unicode calc subgoal (Stub conclusion) spec =
+  ppSequent unicode calc conclusion ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' unicode calc subgoal (Axiom conclusion axiom _ _) spec =
+  "[" ++ ppSequent unicode calc conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
+ppDerivationTree' unicode calc subgoal (Der conclusion rule _ _ ders) spec =
   let newSpecs = zipWith (++) (repeat spec) (map (:[]) [1..length ders])
-      ppDers = zipWith (ppDerivationTree' unicode subgoal) ders newSpecs
+      ppDers = zipWith (ppDerivationTree' unicode calc subgoal) ders newSpecs
       premString = foldl spliceStrings "" ppDers
       premStringWidth = case premString of (_:_) -> maximum (map length (lines premString))
                                            _     -> 0
-      concString = ppSequent unicode conclusion ++ if spec == subgoal then "*" else ""
+      concString = ppSequent unicode calc conclusion ++ if spec == subgoal then "*" else ""
       concStringWidth = length concString
       width = max premStringWidth concStringWidth
       premPad = (width - premStringWidth) `div` 2
@@ -304,5 +314,5 @@ ppDerivationTree' unicode subgoal (Der conclusion rule _ _ ders) spec =
      "\n" ++ concString'
 
 -- | Pretty print a derivation as a tree in the typical style.
-ppDerivationTree :: Bool -> Derivation -> GoalSpec -> String
-ppDerivationTree unicode der subgoal = ppDerivationTree' unicode subgoal der []
+ppDerivationTree :: Bool -> Calculus -> Derivation -> GoalSpec -> String
+ppDerivationTree unicode calc der subgoal = ppDerivationTree' unicode calc subgoal der []

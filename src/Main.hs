@@ -106,7 +106,7 @@ help env _ = do mapM_ showCommand commands
 setTopGoal :: Env -> String -> IO Env
 setTopGoal env arg =
   if null goalString
-  then do putStrLn $ ppSequent (unicode env) $ conclusion (goal env)
+  then do putStrLn $ ppSequent (unicode env) (calculus env) $ conclusion (goal env)
           return env
   else case parse (sequent (calculus env) <* end) goalString of
     [] -> do putStrLn $ "Couldn't parse sequent \"" ++ goalString ++ "\"."
@@ -114,7 +114,7 @@ setTopGoal env arg =
     -- TODO: Figure out why there might be multiple parses here (I know why but look
     -- into fixing it)
     ((sequent,_):_) -> do
-      putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) sequent ++ "\"."
+      putStrLn $ "Changing goal to \"" ++ ppSequent (unicode env) (calculus env) sequent ++ "\"."
       return $ env { goal = Stub sequent,
                      subgoal = [],
                      history = ["top " ++ goalString, "calc " ++ calcName (calculus env)]
@@ -130,24 +130,24 @@ listGoals env _ = do
   return env
   where printGoal ([], sequent) = do
           putStr $ if [] == (subgoal env) then " *" else "  "
-          putStrLn $ "top: " ++ ppSequent (unicode env) sequent
+          putStrLn $ "top: " ++ ppSequent (unicode env) (calculus env) sequent
         printGoal (spec, sequent) = do
           putStr $ if spec == (subgoal env) then " *" else "  "
           putStr $ ppGoalSpec spec
-          putStrLn $ ": " ++ ppSequent (unicode env) sequent
+          putStrLn $ ": " ++ ppSequent (unicode env) (calculus env) sequent
 
 changeSubgoal :: Env -> String -> IO Env
 changeSubgoal env arg =
   if null subgoalString
   then do let der = getCurrentGoal env
-          putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion der)
+          putStr $ "Current subgoal: " ++ ppSequent (unicode env) (calculus env) (conclusion der)
           putStrLn $ " [" ++ ppGoalSpec (subgoal env) ++ "]"
           return env
   else case getGoal subgoalSpec (goal env) of
          Nothing  -> do putStrLn $ "Nonexistent subgoal: " ++ subgoalString
                         return env
          Just der -> do
-           putStr $ "Current subgoal: " ++ ppSequent (unicode env) (conclusion der)
+           putStr $ "Current subgoal: " ++ ppSequent (unicode env) (calculus env) (conclusion der)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
            let newHistory = case (history env) of
                               (comm:cs) | "goal " `isPrefixOf` comm -> ("goal " ++ subgoalString) : cs
@@ -171,7 +171,7 @@ clear env arg =
                        return env
          Just newGoal -> do
            putStr $ "Current subgoal: "
-           putStr $ ppSequent (unicode env) (conclusion $ fromJust $ getGoal (subgoal env) newGoal)
+           putStr $ ppSequent (unicode env) (calculus env) (conclusion $ fromJust $ getGoal (subgoal env) newGoal)
            putStrLn $ " [" ++ ppGoalSpec (subgoal env) ++ "]"
            let newHistory = ("clear " ++ subgoalString) : (history env)
            return $ env { goal = newGoal, history = newHistory }
@@ -180,7 +180,7 @@ clear env arg =
                        return env
          Just newGoal -> do
            putStr $ "Current subgoal: "
-           putStr $ ppSequent (unicode env) (conclusion $ fromJust $ getGoal subgoalSpec newGoal)
+           putStr $ ppSequent (unicode env) (calculus env) (conclusion $ fromJust $ getGoal subgoalSpec newGoal)
            putStrLn $ " [" ++ ppGoalSpec subgoalSpec ++ "]"
            let newHistory = ("clear " ++ subgoalString) : (history env)
            return $ env { goal = newGoal, subgoal = subgoalSpec, history = newHistory }
@@ -196,7 +196,7 @@ check env _ = do
   case checkDerivation (calculus env) (goal env) of
     Left d -> do
       putStrLn "Error in subderivation: "
-      putStrLn $ ppDerivation (unicode env) d
+      putStrLn $ ppDerivation (unicode env) (calculus env) d
     Right () -> do
       putStrLn $ "Valid derivation in " ++ calcName (calculus env)
   return env
@@ -213,7 +213,7 @@ getFormBindings unicode calc (PredPat p:pats) = do
              getFormBindings unicode calc (PredPat p:pats)
     [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (p, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
+    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
 getFormBindings unicode calc (FormPat a:pats) = do
   putStr $ "Need binding for variable " ++ a ++ ":\n  " ++ a ++ " ::= "
   hFlush stdout
@@ -224,7 +224,7 @@ getFormBindings unicode calc (FormPat a:pats) = do
              getFormBindings unicode calc (FormPat a:pats)
     [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (a, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode (map fst x)
+    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
 getFormBindings unicode calc (SetPat gamma:pats) = do
   putStr $ "Need binding for formula list " ++ gamma ++ ":\n  " ++ gamma ++ " ::= "
   hFlush stdout
@@ -235,8 +235,8 @@ getFormBindings unicode calc (SetPat gamma:pats) = do
              getFormBindings unicode calc (SetPat gamma:pats)
     [(fs,_)] -> do rest <- getFormBindings unicode calc pats
                    return $ (gamma, fs) : rest
-    x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode) (map fst x))
-getFormBindings unicode _ (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
+    x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode calc) (map fst x))
+getFormBindings unicode calc (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
 
 getTermBindings :: Bool -> [TermPat] -> IO TermAssignment
 getTermBindings unicode [] = return []
@@ -300,7 +300,7 @@ rule env arg =
                   putStrLn $ "Applying " ++ name ++ "."
                   let nextSubgoal = getNextSubgoal newGoal (subgoal env)
                   putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
-                    ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
+                    ": " ++ ppSequent (unicode env) (calculus env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
                   let newHistory = ("rule " ++ ruleString) : (history env)
                   return env { goal = newGoal, subgoal = nextSubgoal, history = newHistory }
                 Nothing -> do
@@ -318,10 +318,10 @@ rule env arg =
               "  " ++ show n ++ ". " ++ name ++ " with no obligations"
             [prem] ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations: " ++
-              ppSequentInst (unicode env) formBinding termBinding prem
+              ppSequentInst (unicode env) (calculus env) formBinding termBinding prem
             _      ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++
-              intercalate "\n     " (map (ppSequentInst (unicode env) formBinding termBinding) prems)
+              intercalate "\n     " (map (ppSequentInst (unicode env) (calculus env) formBinding termBinding) prems)
           where Just (prems, _) = lookup name (rules (calculus env))
         showRules n [] = []
         showRules n (x:xs) = showRule n x : showRules (n+1) xs
@@ -351,7 +351,7 @@ axiom env arg =
               let Just newGoal = instAxiom (calculus env) name formBindings termBindings (subgoal env) (goal env)
               let nextSubgoal = getNextSubgoal newGoal (subgoal env)
               putStrLn $ "Setting active subgoal to " ++ ppGoalSpec nextSubgoal ++
-                ": " ++ ppSequent (unicode env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
+                ": " ++ ppSequent (unicode env) (calculus env) (conclusion (fromJust (getGoal nextSubgoal newGoal)))
               let newHistory = ("axiom " ++ axiomString) : (history env)
               return env { goal = newGoal, subgoal = nextSubgoal, history = newHistory }
   where axiomString = dropWhile (== ' ') arg
@@ -362,15 +362,15 @@ axiom env arg =
         showAxioms n [] = []
         showAxioms n (x:xs) = showAxiom n x : showAxioms (n+1) xs
         ppFormulaAssignment bindings = intercalate ", " (map showBindings bindings)
-        showBindings (var, [f]) = var ++ " := " ++ ppFormula (unicode env) f
-        showBindings (var, fs)  = var ++ " := [" ++ ppFormulaList (unicode env) fs ++ "]"
+        showBindings (var, [f]) = var ++ " := " ++ ppFormula (unicode env) (calculus env) f
+        showBindings (var, fs)  = var ++ " := [" ++ ppFormulaList (unicode env) (calculus env) fs ++ "]"
 
 printProofTree :: Env -> String -> IO Env
 printProofTree env _ =
   case (pretty env) of
-    True -> do putStr $ ppDerivationTree (unicode env) (goal env) (subgoal env)
+    True -> do putStr $ ppDerivationTree (unicode env) (calculus env) (goal env) (subgoal env)
                return env
-    _    -> do putStr $ ppDerivation (unicode env) (goal env)
+    _    -> do putStr $ ppDerivation (unicode env) (calculus env) (goal env)
                return env
 
 togglePretty :: Env -> String -> IO Env
@@ -407,7 +407,7 @@ changeCalculus env arg =
 listRule :: Env -> String -> IO Env
 listRule env arg =
   case (lookup ruleStr $ axioms (calculus env), lookup ruleStr $ rules (calculus env)) of
-    (Just axiomPat,_) -> do putStrLn (ppSequentPat (unicode env) axiomPat ++ " (" ++ ruleStr ++ ")")
+    (Just axiomPat,_) -> do putStrLn (ppSequentPat (unicode env)  axiomPat ++ " (" ++ ruleStr ++ ")")
                             return env
     (_,Just rulePat)  -> do putStrLn (ppRulePat (unicode env) "" (ruleStr, rulePat))
                             return env

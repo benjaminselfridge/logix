@@ -199,7 +199,7 @@ formulaList calc = sepBy (spaces *> char ',' *> spaces) (formula calc)
 sequent :: Calculus -> Parser Sequent
 sequent calc = do ants <- formulaList calc
                   spaces
-                  string "=>"
+                  string "=>" <|> string "⇒"
                   spaces
                   sucs <- formulaList calc
                   return $ ants :=> sucs

@@ -22,6 +22,9 @@ concatPairs = foldl appendPair ([],[])
 nubPair :: (Eq a, Eq b) => ([a],[b]) -> ([a],[b])
 nubPair (xs, ys) = (nub xs, nub ys)
 
+nubPairBy :: (a -> a -> Bool) -> (b -> b -> Bool) -> ([a],[b]) -> ([a],[b])
+nubPairBy f g (xs, ys) = (nubBy f xs, nubBy g ys)
+
 (!!!) :: [a] -> Int -> Maybe a
 infixl 9 !!!
 (x:xs) !!! n | n == 0    = Just x

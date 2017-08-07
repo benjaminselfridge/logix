@@ -28,6 +28,9 @@ module Calculus
   , FormulaAssignment
   , TermAssignment
   , Calculus(..)
+  , UAbbrev(..)
+--  , uAbbrevMatch
+  , uAbbreviateForm
   , calcZeroaryOps
   , calcBinaryOps
   , calcQts
@@ -84,9 +87,9 @@ newtype UniName = UniName { getNames :: (String, String)
                           }
   deriving (Eq, Show)
 
-data Formula = ZeroaryOp UniName
+data Formula = Pred String [Term]
+             | ZeroaryOp UniName
              -- ^ something like Bottom.
-             | Pred String [Term]
              | BinaryOp UniName Formula Formula
              -- ^ first arg is the name for the op
              | Quant UniName String Formula
@@ -144,7 +147,7 @@ data TermPat = VarPat  { termPatId :: String }
              -- ^ only match variables
              | TermPat { termPatId :: String }
              -- ^ match any term
-  deriving (Eq)
+  deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 -- | A 'FormulaPat' is a placeholder for a 'Formula' or a list of 'Formula's. There is
@@ -179,7 +182,7 @@ data FormulaPat = ZeroaryOpPat UniName
                 -- ^ substitute arg1 with arg2 in arg3
                 | NoFreePat String FormulaPat
                 -- ^ arg2 with no free variables matching arg1
-  deriving (Eq)
+  deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
 -- | Pattern for a sequent.
@@ -202,7 +205,6 @@ type TermAssignment = [(String, Term)]
 -- | Given an assignment and a formula pattern, return a list of all the patterns in
 -- the formula that are unbound. Use this in conjunction with instFormulaPat.
 tryFormula :: FormulaAssignment -> TermAssignment -> FormulaPat -> ([FormulaPat], [TermPat])
-tryFormula _ _ (ZeroaryOpPat _) = ([], [])
 tryFormula formBindings termBindings (PredPat p) =
   case lookup p formBindings of
     Nothing -> ([PredPat p], [])
@@ -215,6 +217,7 @@ tryFormula formBindings termBindings (SetPat p) =
   case lookup p formBindings of
     Nothing -> ([SetPat p], [])
     Just _  -> ([], [])
+tryFormula _ _ (ZeroaryOpPat _) = ([], [])
 tryFormula formBindings termBindings (BinaryOpPat _ s t) = (sForms ++ tForms, sTerms ++ tTerms) where
   (sForms, sTerms) = tryFormula formBindings termBindings s
   (tForms, tTerms) = tryFormula formBindings termBindings t
@@ -245,10 +248,10 @@ tryFormula formBindings termBindings (NoFreePat x s) = (sForms, xTerms ++ sTerms
 -- term levels should have corresponding bindings in the first arguments provided for
 -- this function.
 instFormulaPat :: FormulaAssignment -> TermAssignment -> FormulaPat -> Maybe [Formula]
-instFormulaPat _ _      (ZeroaryOpPat op) = return [ZeroaryOp op]
 instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
 instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
 instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
+instFormulaPat _ _      (ZeroaryOpPat op) = return [ZeroaryOp op]
 instFormulaPat formBindings termBindings (BinaryOpPat op s t) = do
   sB <- instFormulaPat formBindings termBindings s
   tB <- instFormulaPat formBindings termBindings t
@@ -330,7 +333,8 @@ match ((BinaryOpPat op pat1 pat2):pats) fs =
                             , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
                             , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
 match ((QuantPat qt x pat):pats) fs =
-  [(mergeForms, mergeTerms) | Quant qt y f <- nub fs
+  [(mergeForms, mergeTerms) | Quant qt' y f <- nub fs
+                            , qt == qt'
                             , (fForms, fTerms) <- match [pat] [f]
                             , (matchForms, matchTerms) <- match pats (delete (Quant qt y f) fs)
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
@@ -424,7 +428,39 @@ matchAll pairs = do
 data Calculus = Calculus { calcName :: String
                          , axioms   :: [(String, SequentPat)]
                          , rules    :: [(String, RulePat)]
+                         , uAbbrevs :: [UAbbrev]
                          }
+
+-- | This will be used for parsing and printing abbreviations of formulas. We provide
+-- an example for abbreviating negation.
+data UAbbrev = UAbbrev { uAbbrevOp  :: UniName
+                       -- ^ = UniName ("~", "¬"), the unary prefix symbol for the
+                       -- abbreviation
+                       , uAbbrevA   :: String
+                       -- ^ = "A", the name of the formula involved in the abbreviation
+                       , uAbbrevPat :: FormulaPat
+                       -- ^ = impliesPat (FormPat "A") bottomPat, where impliesPat
+                       -- and bottomPat are suitably-defined functions
+                       }
+  deriving Show
+
+extractSingleton :: [a] -> Maybe a
+extractSingleton [x] = Just x
+extractSingleton _   = Nothing
+
+-- | Given a formula f and a unary abbreviation, try and match f against the
+-- abbreviation; if the match succeeds, return the formula that uAbbrevA should be
+-- bound to, along with the original UAbbrev (this is for convenience). (TODO: give
+-- example for negation)
+uAbbrevMatch :: Formula -> UAbbrev -> Maybe (UAbbrev, Formula)
+uAbbrevMatch f abb@(UAbbrev op a pat) = do
+  (formBindings, termBindings) <- extractSingleton $ match [pat] [f]
+  gs <- instFormulaPat formBindings termBindings (FormPat a)
+  g  <- extractSingleton gs
+  return $ (abb, g)
+
+uAbbreviateForm :: Calculus -> Formula -> Maybe (UAbbrev, Formula)
+uAbbreviateForm calc f = extractSingleton $ catMaybes $ map (uAbbrevMatch f) (uAbbrevs calc)
 
 -- TODO: Expand this to look at the axioms too!
 calcFormulaPats :: Calculus -> [FormulaPat]
@@ -561,7 +597,9 @@ tryRule :: Calculus -> String -> FormulaAssignment -> TermAssignment -> ([Formul
 tryRule calculus name formBindings termBindings = case pat of
   Nothing -> ([],[])
   Just (prems, conc) ->
-    nubPair $ trySequent formBindings termBindings conc `appendPair` concatPairs (map (trySequent formBindings termBindings) prems)
+    let (rstForms, rstTerms) = concatPairs $ map (trySequent formBindings termBindings) prems
+        (forms, terms) = trySequent formBindings termBindings conc
+    in nubPair (forms ++ rstForms, terms ++ rstTerms)
   where pat = lookup name (rules calculus)
 
 -- | Given a 'Calculus', a rule name, an assignment for the rule, a 'GoalSpec'
