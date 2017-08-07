@@ -143,10 +143,10 @@ appTerm = do name <- many1 alphaNum
 -- TODO: finish parsing
 
 formula :: Calculus -> Parser Formula
-formula calc = asum (map (\op -> opFormula calc op) (calcBinaryOps calc)) <|> baseFormula calc
+formula calc = asum (map (\op -> binaryOpFormula calc op) (calcBinaryOps calc)) <|> baseFormula calc
 
-opFormula :: Calculus -> UniName -> Parser Formula
-opFormula calc op@(UniName (aop, uop)) = do
+binaryOpFormula :: Calculus -> UniName -> Parser Formula
+binaryOpFormula calc op@(UniName (aop, uop)) = do
   a <- baseFormula calc
   spaces
   string aop <|> string uop
@@ -157,7 +157,17 @@ opFormula calc op@(UniName (aop, uop)) = do
 baseFormula :: Calculus -> Parser Formula
 baseFormula calc = paren (formula calc) <|>
                    terminalFormula calc <|>
+                   asum (map (\abb -> uAbbrevFormula calc abb) (uAbbrevs calc)) <|>
                    asum (map (\qt -> quantFormula calc qt) (calcQts calc))
+
+uAbbrevFormula :: Calculus -> UAbbrev -> Parser Formula
+uAbbrevFormula calc uAbbrev@(UAbbrev (UniName (aop, uop)) a pat) = do
+  string aop <|> string uop
+  spaces
+  sf <- baseFormula calc
+  case instFormulaPat [(a, [sf])] [] pat of
+    Just [f'] -> return f'
+    _ -> error $ "Couldn't instantiate abbreviation " ++ show uAbbrev
 
 terminalFormula :: Calculus -> Parser Formula
 terminalFormula calc = predFormula <|>

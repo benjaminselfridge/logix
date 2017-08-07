@@ -422,7 +422,7 @@ matchAll pairs = do
 --               , [a $> b, gamma] ::=> [c]))
 --
 --   , (\"L_|_\", ([ ]
---               , [botpat, gamma] ::=> [c]))
+--               , [botpat, gamma] ::=> [c]))p
 --   ]}
 -- @
 data Calculus = Calculus { calcName :: String
