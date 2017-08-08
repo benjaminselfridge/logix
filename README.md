@@ -275,16 +275,6 @@ set of group axioms every time I want to figure out which rule to apply.
 Abbreviations and top-level axioms/theorems are necessary to do anything useful, so
 that is definitely coming.
 
-Finally, I also plan on generalizing logix to include systems with different kinds of
-connectives; modal/temporal logics, linear logics, etc. There are currently three
-binary connectives, two quantifiers, one unary connective, and one 0-ary
-connective. There's no inherent meaning to these quantifiers; it depends on what
-rules you write. You can specify, in logix, a calculus just like G3c but with |
-swapped with &. So there's no real reason why we can't generalize these operators and
-allow the user to define their own. The only issue with this would be parsing
-precedence, but that could be part of defining a new connective/quantifier;
-specifying its precedence. So that is another addition I'm excited to start on.
-
 Please contact me if you have any feedback or questions, and especially if you
 discover a bug.
 

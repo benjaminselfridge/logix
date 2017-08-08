@@ -90,6 +90,7 @@ newtype UniName = UniName { getNames :: (String, String)
 data Formula = Pred String [Term]
              | ZeroaryOp UniName
              -- ^ something like Bottom.
+             | UnaryOp UniName Formula
              | BinaryOp UniName Formula Formula
              -- ^ first arg is the name for the op
              | Quant UniName String Formula
@@ -109,8 +110,9 @@ termVars (AppTerm _ ts) = [ v | t <- ts, v <- termVars t ]
 -- | All the free variables in a formula.
 freeVars :: Formula -> [String]
 freeVars = nub . freeVars' where
-  freeVars' (ZeroaryOp _)    = []
   freeVars' (Pred _ ts)      = [ v | t <- ts, v <- termVars t ]
+  freeVars' (ZeroaryOp _)    = []
+  freeVars' (UnaryOp _ f)    = freeVars' f
   freeVars' (BinaryOp _ f g) = freeVars' f ++ freeVars' g
   freeVars' (Quant    _ x f) = [ v | v <- freeVars' f, v /= x ]
 
@@ -122,8 +124,9 @@ substTerm _ _ term = term
 
 -- | Substitute a variable for a term inside a formula.
 substFormula :: String -> Term -> Formula -> Formula
-substFormula _ _ (ZeroaryOp op)     = ZeroaryOp op
 substFormula x t (Pred    p ts)     = Pred p $ map (substTerm x t) ts
+substFormula _ _ (ZeroaryOp op)     = ZeroaryOp op
+substFormula x t (UnaryOp op f)     = UnaryOp op (substFormula x t f)
 substFormula x t (BinaryOp op f g)  = BinaryOp op (substFormula x t f) (substFormula x t g)
 substFormula x t (Quant    qt y f)  | x == y    = Quant qt y f
                                     | otherwise = Quant qt y (substFormula x t f)
@@ -166,6 +169,7 @@ data TermPat = VarPat  { termPatId :: String }
 -- to this, and we will be able to add equality axioms to any calculus.
 
 data FormulaPat = ZeroaryOpPat UniName
+                | UnaryOpPat UniName FormulaPat
                 | BinaryOpPat UniName FormulaPat FormulaPat
                 -- ^ General binary connective. The UniName is the name for the
                 -- operator, which provides both an ASCII and Unicode variant.
@@ -218,6 +222,8 @@ tryFormula formBindings termBindings (SetPat p) =
     Nothing -> ([SetPat p], [])
     Just _  -> ([], [])
 tryFormula _ _ (ZeroaryOpPat _) = ([], [])
+tryFormula formBindings termBindings (UnaryOpPat _ s) = (sForms, sTerms) where
+  (sForms, sTerms) = tryFormula formBindings termBindings s
 tryFormula formBindings termBindings (BinaryOpPat _ s t) = (sForms ++ tForms, sTerms ++ tTerms) where
   (sForms, sTerms) = tryFormula formBindings termBindings s
   (tForms, tTerms) = tryFormula formBindings termBindings t
@@ -252,6 +258,9 @@ instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
 instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
 instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
 instFormulaPat _ _      (ZeroaryOpPat op) = return [ZeroaryOp op]
+instFormulaPat formBindings termBindings (UnaryOpPat op s) = do
+  sB <- instFormulaPat formBindings termBindings s
+  return [UnaryOp op s | s <- sB]
 instFormulaPat formBindings termBindings (BinaryOpPat op s t) = do
   sB <- instFormulaPat formBindings termBindings s
   tB <- instFormulaPat formBindings termBindings t
@@ -324,8 +333,15 @@ match (ZeroaryOpPat op:pats) fs =
   [matchRest | ZeroaryOp op <- nub fs
              , fs'       <- [delete (ZeroaryOp op) fs]
              , matchRest <- match pats fs']
+match ((UnaryOpPat op pat):pats) fs =
+  [(mergeForms, mergeTerms) | UnaryOp op' c <- nub fs
+                            , op == op'
+                            , (cForms, cTerms) <- match [pat] [c]
+                            , (matchForms, matchTerms) <- match pats (delete (UnaryOp op c) fs)
+                            , mergeForms <- mergeFormulaAssignments [cForms, matchForms]
+                            , mergeTerms <- mergeTermAssignments [cTerms, matchTerms]]
 match ((BinaryOpPat op pat1 pat2):pats) fs =
-  [(mergeForms, matchTerms) | BinaryOp op' c1 c2 <- nub fs
+  [(mergeForms, mergeTerms) | BinaryOp op' c1 c2 <- nub fs
                             , op == op'
                             , (c1Forms, c1Terms) <- match [pat1] [c1]
                             , (c2Forms, c2Terms) <- match [pat2] [c2]
@@ -471,6 +487,7 @@ calcFormulaPats calc = forms where
 
 formPatZeroaryOps :: FormulaPat -> [UniName]
 formPatZeroaryOps (ZeroaryOpPat op)     = [op]
+formPatZeroaryOps (UnaryOpPat _ f)      = formPatZeroaryOps f
 formPatZeroaryOps (BinaryOpPat _ f1 f2) = formPatZeroaryOps f1 ++ formPatZeroaryOps f2
 formPatZeroaryOps (QuantPat _ _ f)      = formPatZeroaryOps f
 formPatZeroaryOps (NoFreePat _ f)       = []
@@ -479,8 +496,19 @@ formPatZeroaryOps _                     = []
 calcZeroaryOps :: Calculus -> [UniName]
 calcZeroaryOps calc = nub $ concat $ map formPatZeroaryOps (calcFormulaPats calc)
 
+formPatUnaryOps :: FormulaPat -> [UniName]
+formPatUnaryOps (UnaryOpPat op f)     = op : formPatUnaryOps f
+formPatUnaryOps (BinaryOpPat _ f1 f2) = formPatUnaryOps f1 ++ formPatUnaryOps f2
+formPatUnaryOps (QuantPat _ _ f)      = formPatUnaryOps f
+formPatUnaryOps (NoFreePat _ f)       = formPatUnaryOps f
+formPatUnaryOps _                     = []
+
+calcUnaryOps :: Calculus -> [UniName]
+calcUnaryOps calc = nub $ concat $ map formPatUnaryOps (calcFormulaPats calc)
+
 formPatBinaryOps :: FormulaPat -> [UniName]
 formPatBinaryOps (BinaryOpPat op f1 f2) = op : (formPatBinaryOps f1 ++ formPatBinaryOps f2)
+formPatBinaryOps (UnaryOpPat _ f)       = formPatBinaryOps f
 formPatBinaryOps (QuantPat _ _ f)       = formPatBinaryOps f
 formPatBinaryOps (NoFreePat _ f)        = formPatBinaryOps f
 formPatBinaryOps _                      = []
@@ -489,6 +517,7 @@ calcBinaryOps :: Calculus -> [UniName]
 calcBinaryOps calc = nub $ concat $ map formPatBinaryOps (calcFormulaPats calc)
 
 formPatQts :: FormulaPat -> [UniName]
+formPatQts (UnaryOpPat _ f)      = formPatQts f
 formPatQts (BinaryOpPat _ f1 f2) = formPatQts f1 ++ formPatQts f2
 formPatQts (QuantPat qt _ f)     = qt : formPatQts f
 formPatQts (NoFreePat _ f)       = formPatQts f
