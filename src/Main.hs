@@ -12,7 +12,7 @@ import Data.List.Split
 import Data.Maybe
 import System.IO
 
-version = "0.2.0"
+version = "0.2.1"
 
 data Env = Env { goal     :: Derivation
                , subgoal  :: GoalSpec
@@ -438,8 +438,8 @@ repl env = do
 
 introMessage :: String
 introMessage =
-  "LogiX (Logic Explorer) v. " ++ version ++ "\n" ++
-  "interactive proof assistant for sequent calculi\n" ++
+  "LogiX (Logic Explorer) v" ++ version ++ "\n" ++
+  "a customizable proof construction tool for sequent calculi\n" ++
   "(c) Ben Selfridge 2017\n\n" ++
   "Type \"help\" for a list of commands.\n"
 
