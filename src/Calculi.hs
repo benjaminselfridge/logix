@@ -289,6 +289,45 @@ g4ip = Calculus {
   bAbbrevs = [iff]
   }
 
+-- Sequent calculus presentation of linear logic
+
+-- formula connectives
+-- botForm     = ZeroaryOp (UniName ("_|_", "⊥"))
+topForm      = ZeroaryOp (UniName ("T","⊤"))
+oneForm      = ZeroaryOp (UniName ("1","1"))
+zeroForm     = ZeroaryOp (UniName ("0","0"))
+dualForm     = UnaryOp (UniName ("~","¬"))
+ofCourseForm = UnaryOp (UniName ("!","!"))
+whyNotForm   = UnaryOp (UniName ("?","?"))
+timesForm    = BinaryOp (UniName ("*","⊗"))
+plusForm     = BinaryOp (UniName ("+","⊕"))
+withForm     = BinaryOp (UniName ("&","*"))
+parForm      = BinaryOp (UniName ("&&", "⅋"))
+
+-- connective patterns
+topPat      = ZeroaryOpPat (UniName ("T","⊤"))
+onePat      = ZeroaryOpPat (UniName ("1","1"))
+zeroPat     = ZeroaryOpPat (UniName ("0","0"))
+dualPat     = UnaryOpPat (UniName ("~","¬"))
+ofCoursePat = UnaryOpPat (UniName ("!","!"))
+whyNotPat   = UnaryOpPat (UniName ("?","?"))
+timesPat    = BinaryOpPat (UniName ("*","⊗"))
+plusPat     = BinaryOpPat (UniName ("+","⊕"))
+withPat     = BinaryOpPat (UniName ("&","*"))
+parPat      = BinaryOpPat (UniName ("&&", "⅋"))
+
+linear :: Calculus
+linear = Calculus {
+  calcName = "linear",
+  axioms = [("Init", [] ::=> [a, dualPat a])],
+  rules =
+  [ ("MConj", ([ [] ::=> [gamma, a], [] ::=> [delta, b] ],
+                 [] ::=> [gamma, delta, a `timesPat` b]))
+  ],
+  uAbbrevs = [],
+  bAbbrevs = []
+  }
+
 -- -- Adapted from Kleene, Mathematical Logic.
 -- hilbert :: Calculus
 -- hilbert = Calculus {

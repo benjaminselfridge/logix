@@ -105,6 +105,7 @@ ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
 ppFormulaPat' unicode (SetPat gamma) = gamma
 ppFormulaPat' unicode (ZeroaryOpPat op) = pickPair unicode (getNames op)
+ppFormulaPat' unicode (UnaryOpPat op s) = pickPair unicode (getNames op) ++ ppFormulaPat' unicode s
 ppFormulaPat' unicode (BinaryOpPat op s t) =
   "(" ++ ppFormulaPat' unicode s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
