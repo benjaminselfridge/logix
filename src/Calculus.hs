@@ -29,17 +29,20 @@ module Calculus
   , TermAssignment
   , Calculus(..)
   , UAbbrev(..)
---  , uAbbrevMatch
+  , BAbbrev(..)
+
+  -- * Pattern matching
+  , match
+  , matchAll
+
+  -- * Calculi functions
   , uAbbreviateForm
+  , bAbbreviateForm
   , calcZeroaryOps
   , calcBinaryOps
   , calcQts
   , instFormulaPat
   , instSequentPat
-
-  -- * Pattern matching
-  , match
-  , matchAll
 
   -- * Derivations
   , Derivation(..)
@@ -445,7 +448,12 @@ data Calculus = Calculus { calcName :: String
                          , axioms   :: [(String, SequentPat)]
                          , rules    :: [(String, RulePat)]
                          , uAbbrevs :: [UAbbrev]
+                         , bAbbrevs :: [BAbbrev]
                          }
+
+extractSingleton :: [a] -> Maybe a
+extractSingleton [x] = Just x
+extractSingleton _   = Nothing
 
 -- | This will be used for parsing and printing abbreviations of formulas. We provide
 -- an example for abbreviating negation.
@@ -460,10 +468,6 @@ data UAbbrev = UAbbrev { uAbbrevOp  :: UniName
                        }
   deriving Show
 
-extractSingleton :: [a] -> Maybe a
-extractSingleton [x] = Just x
-extractSingleton _   = Nothing
-
 -- | Given a formula f and a unary abbreviation, try and match f against the
 -- abbreviation; if the match succeeds, return the formula that uAbbrevA should be
 -- bound to, along with the original UAbbrev (this is for convenience). (TODO: give
@@ -477,6 +481,25 @@ uAbbrevMatch f abb@(UAbbrev op a pat) = do
 
 uAbbreviateForm :: Calculus -> Formula -> Maybe (UAbbrev, Formula)
 uAbbreviateForm calc f = extractSingleton $ catMaybes $ map (uAbbrevMatch f) (uAbbrevs calc)
+
+data BAbbrev = BAbbrev { bAbbrevOp  :: UniName
+                       , bAbbrevA   :: String
+                       , bAbbrevB   :: String
+                       , bAbbrevPat :: FormulaPat
+                       }
+  deriving Show
+
+bAbbrevMatch :: Formula -> BAbbrev -> Maybe (BAbbrev, Formula, Formula)
+bAbbrevMatch f abb@(BAbbrev op a b pat) = do
+  (formBindings, termBindings) <- extractSingleton $ match [pat] [f]
+  gs <- instFormulaPat formBindings termBindings (FormPat a)
+  hs <- instFormulaPat formBindings termBindings (FormPat b)
+  g <- extractSingleton gs
+  h <- extractSingleton hs
+  return $ (abb, g, h)
+
+bAbbreviateForm :: Calculus -> Formula -> Maybe (BAbbrev, Formula, Formula)
+bAbbreviateForm calc f = extractSingleton $ catMaybes $ map (bAbbrevMatch f) (bAbbrevs calc)
 
 -- TODO: Expand this to look at the axioms too!
 calcFormulaPats :: Calculus -> [FormulaPat]

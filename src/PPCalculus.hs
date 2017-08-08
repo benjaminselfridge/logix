@@ -59,6 +59,10 @@ ppFormula' :: Bool -> Calculus -> Formula -> String
 ppFormula' unicode calc f
   | Just (uAbbrev, f') <- uAbbreviateForm calc f =
       pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula' unicode calc f'
+  | Just (bAbbrev, f', g') <- bAbbreviateForm calc f =
+      "(" ++ ppFormula' unicode calc f' ++
+      " " ++ pickPair unicode (getNames $ bAbbrevOp bAbbrev) ++ " " ++
+      ppFormula' unicode calc g' ++ ")"
 ppFormula' unicode calc (Pred p [])   = p
 ppFormula' unicode calc (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
 ppFormula' unicode calc (ZeroaryOp op)    = pickPair unicode (getNames op)
@@ -74,6 +78,10 @@ ppFormula :: Bool -> Calculus -> Formula -> String
 ppFormula unicode calc f
   | Just (uAbbrev, f') <- uAbbreviateForm calc f =
       pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula unicode calc f'
+  | Just (bAbbrev, f', g') <- bAbbreviateForm calc f =
+      ppFormula' unicode calc f' ++
+      " " ++ pickPair unicode (getNames $ bAbbrevOp bAbbrev) ++ " " ++
+      ppFormula' unicode calc g'
 ppFormula unicode calc (BinaryOp op a b) =
   ppFormula' unicode calc a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ ppFormula' unicode calc b
 ppFormula unicode calc formula = ppFormula' unicode calc formula
@@ -216,7 +224,7 @@ contexts _ = []
 -- TODO: add variables and terms to the "where" clause
 -- TODO: display "NoFree" patterns more elegantly, maybe with some kind of footnote.
 ppCalculus :: Bool -> Calculus -> String
-ppCalculus unicode (Calculus name axioms rules abbrevs) =
+ppCalculus unicode (Calculus name axioms rules uAbbrevs bAbbrevs) =
   "Calculus " ++ name ++ ".\n\n" ++
   "Axioms:\n" ++ concat (map showAxiom axioms) ++ "\n" ++
   "Rules:\n\n" ++ concat (map showRule rules) ++
