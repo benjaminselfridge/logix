@@ -138,14 +138,14 @@ ppFormulaPat unicode f = ppFormulaPat' unicode f
 ppSequentPat unicode (ants ::=> sucs) =
   intercalate ", " (map (ppFormulaPat unicode)  ants) ++
   " " ++ pickPair unicode (getNames sq) ++ " " ++
-  intercalate ", " (map (ppFormulaPat True)  sucs)
+  intercalate ", " (map (ppFormulaPat unicode)  sucs)
 
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
 
 -- TODO: removed the [no free] tag in printing a formula inst, but we might want to
 -- give the user some feedback when they try and instantiate the pattern
 -- incorrectly.
--- TODO: take abbreviations into account somehow.
+-- TODO: does this handle abbreviations correctly?
 -- TODO: when we have a SetPat inside a UnaryOpPat, we need to somehow map the unary
 -- op over the setpat. I think the solution is really to return a *list* of strings
 -- from ppFormulaInst', and map the operator over the list. However, we still have to
@@ -161,7 +161,7 @@ ppFormulaInst' unicode calc formBindings termBindings (FormPat a) = case lookup 
   Just fs  -> error $ "var variable " ++ a ++ " bound to " ++ ppFormulaList unicode calc fs
 ppFormulaInst' unicode calc formBindings termBindings (SetPat g) = case lookup g formBindings of
   Nothing -> ["<" ++ g ++ ">"]
-  Just fs -> map (ppFormula unicode calc) fs -- show the formulas
+  Just fs -> map (ppFormula' unicode calc) fs -- show the formulas
 ppFormulaInst' unicode calc formBindings termBindings (ZeroaryOpPat op) =
   [pickPair unicode (getNames op)]
 ppFormulaInst' unicode calc formBindings termBindings (UnaryOpPat op s) =

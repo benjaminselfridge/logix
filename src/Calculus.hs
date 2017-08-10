@@ -87,11 +87,6 @@ instance Show Term where
 --------------------------------------------------------------------------------
 -- | Represents a single formula in predicate calculus.
 
--- TODO: for unary ops, add the ability for a bracket notation <> or [], etc. instead
--- of prefix. make a new datatype called "UnaryOpSym" or something that has two
--- cases, one for prefix and one for bracket. Then thread that through everything
--- (yuck).
-
 data Formula = Pred String [Term]
              | ZeroaryOp { formulaOp :: UniName }
              -- ^ General 0-ary connective, like bottom.

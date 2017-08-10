@@ -30,7 +30,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3i, g0c, g0i, g3ipm, g4ip]
+calculi = [g3c, g3i, g0c, g0i, g3ipm, g4ip, wll]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -281,4 +281,66 @@ g4ip = Calculus {
   ],
   uAbbrevs = [neg],
   bAbbrevs = [iff]
+  }
+
+--------------------------------------------------------------------------------
+-- Linear logic
+
+-- From "A taste of linear logic", Wadler.
+
+-- connectives
+
+-- Intuitionistic and linear assumptions. Linear assumptions are the default, so we
+-- just provide a unary op indicating that an assumption is intuitionistic. This is
+-- like Wadler's [] notation, but we'll use ^ instead of brackets.
+
+intPat = UnaryOpPat (UniName ("*","*"))
+
+-- unary operators
+ofCoursePat = UnaryOpPat (UniName ("!","!"))
+
+-- binary operators
+lolPat = BinaryOpPat (UniName ("-o", "⊸"))
+timesPat = BinaryOpPat (UniName ("x", "⊗"))
+plusPat = BinaryOpPat (UniName ("+", "⊕"))
+-- we also use andPat, above.
+
+-- wll, or Wadler's linear logic.
+wll :: Calculus
+wll = Calculus
+  { calcName = "wll"
+  , axioms = [ ("Id",  [a] ::=> [a])
+             , ("*Id", [intPat a] ::=> [a])]
+  , rules =
+    [ ("!I",  ([[intPat gamma] ::=> [a]]
+              , [intPat gamma] ::=> [ofCoursePat a]))
+    , ("!E",  ([[gamma] ::=> [ofCoursePat a], [delta, intPat a] ::=> [b]]
+              , [gamma, delta] ::=> [b]))
+    , ("-oI", ([[gamma, a] ::=> [b]]
+              , [gamma] ::=> [a `lolPat` b]))
+    , ("-oE", ([[gamma] ::=> [a `lolPat` b], [delta] ::=> [a]]
+              , [gamma, delta] ::=> [b]))
+    , ("xI",  ([[gamma] ::=> [a], [delta] ::=> [b]]
+              , [gamma, delta] ::=> [a `timesPat` b]))
+    , ("xE",  ([[gamma] ::=> [a `timesPat` b], [delta, a, b] ::=> [c]]
+              , [gamma, delta] ::=> [c]))
+    , ("&I",  ([[gamma] ::=> [a], [gamma] ::=> [b]]
+              , [gamma] ::=> [a `andPat` b]))
+    , ("&E1", ([[gamma] ::=> [a `andPat` b]]
+              , [gamma] ::=> [a]))
+    , ("&E2", ([[gamma] ::=> [a `andPat` b]]
+              , [gamma] ::=> [b]))
+    , ("+I1", ([[gamma] ::=> [a]]
+              , [gamma] ::=> [a `plusPat` b]))
+    , ("+I2", ([[gamma] ::=> [b]]
+              , [gamma] ::=> [a `plusPat` b]))
+    , ("+E",  ([[gamma] ::=> [a `plusPat` b], [delta, a] ::=> [c], [delta, b] ::=> [c]]
+              , [gamma, delta] ::=> [c]))
+    , ("Ctr", ([[gamma, intPat a, intPat a] ::=> [b]]
+              , [gamma, intPat a] ::=> [b]))
+    , ("Wk",  ([[gamma] ::=> [b]]
+              , [gamma, intPat a] ::=> [b]))
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
   }
