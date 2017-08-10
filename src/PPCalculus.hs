@@ -1,3 +1,13 @@
+{-|
+Module      : PPCalculus
+Description : Pretty printing.
+Copyright   : (c) Ben Selfridge, 2017
+License     : BSD3
+Maintainer  : benselfridge@gmail.com
+Stability   : experimental
+
+-}
+
 module PPCalculus
     -- * Pretty printing
   ( ppFormula
@@ -47,12 +57,7 @@ padL n = (unlines . map (replicate n ' '++) . lines)
 --------------------------------------------------------------------------------
 -- pretty printing
 
--- TODO: move all this to PPCalculus.hs
-
 sq = UniName ("=>","⇒")
-
--- TODO: pretty print abbreviated. modify ppFormula, ppFormulaList, ppSequent for
--- now. Later, think about how to do patterns.
 
 -- | Pretty print a formula, with top level parentheses.
 ppFormula' :: Bool -> Calculus -> Formula -> String
@@ -66,6 +71,8 @@ ppFormula' unicode calc f
 ppFormula' unicode calc (Pred p [])   = p
 ppFormula' unicode calc (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
 ppFormula' unicode calc (ZeroaryOp op)    = pickPair unicode (getNames op)
+ppFormula' unicode calc (UnaryOp op a) =
+  pickPair unicode (getNames op) ++ ppFormula' unicode calc a
 ppFormula' unicode calc (BinaryOp op a b) =
   "(" ++ ppFormula' unicode calc a ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
@@ -77,7 +84,7 @@ ppFormula' unicode calc (Quant qt x a) =
 ppFormula :: Bool -> Calculus -> Formula -> String
 ppFormula unicode calc f
   | Just (uAbbrev, f') <- uAbbreviateForm calc f =
-      pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula unicode calc f'
+      pickPair unicode (getNames $ uAbbrevOp uAbbrev) ++ ppFormula' unicode calc f'
   | Just (bAbbrev, f', g') <- bAbbreviateForm calc f =
       ppFormula' unicode calc f' ++
       " " ++ pickPair unicode (getNames $ bAbbrevOp bAbbrev) ++ " " ++
@@ -100,6 +107,10 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
 -- -> _|_.
 
 -- | Pretty print a formula pattern, with top level parentheses.
+
+-- TODO: I am removing the [no free ] tag because it looks like shit, but we might
+-- want to display the no free pattern in ppCalculus. Perhaps as a one-liner
+-- immediately below the rule.
 ppFormulaPat' :: Bool -> FormulaPat -> String
 ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
@@ -113,7 +124,7 @@ ppFormulaPat' unicode (BinaryOpPat op s t) =
 ppFormulaPat' unicode (QuantPat qt x s) =
   pickPair unicode (getNames qt) ++ x ++ ".(" ++ ppFormulaPat' unicode s ++ ")"
 ppFormulaPat' unicode (SubstPat x t a) = a ++ "(" ++ termPatId t ++ "/" ++ x ++ ")"
-ppFormulaPat' unicode (NoFreePat x s) = ppFormulaPat' unicode s ++ "[no free " ++ x ++ "]"
+ppFormulaPat' unicode (NoFreePat x s) = ppFormulaPat' unicode s
 
 -- | Pretty print a formula pattern, omitting top level parentheses.
 ppFormulaPat :: Bool -> FormulaPat -> String
@@ -130,6 +141,15 @@ ppSequentPat unicode (ants ::=> sucs) =
   intercalate ", " (map (ppFormulaPat True)  sucs)
 
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
+
+-- TODO: removed the [no free] tag in printing a formula inst, but we might want to
+-- give the user some feedback when they try and instantiate the pattern
+-- incorrectly.
+-- TODO: take abbreviations into account somehow.
+-- TODO: when we have a SetPat inside a UnaryOpPat, we need to somehow map the unary
+-- op over the setpat. I think the solution is really to return a *list* of strings
+-- from ppFormulaInst', and map the operator over the list. However, we still have to
+-- think about how to do this for BinaryOps...
 ppFormulaInst' :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
 ppFormulaInst' unicode calc formBindings termBindings (PredPat p) = case lookup p formBindings of
   Nothing  -> "<" ++ p ++ ">" -- p is unbound
@@ -143,6 +163,8 @@ ppFormulaInst' unicode calc formBindings termBindings (SetPat g) = case lookup g
   Nothing -> "<" ++ g ++ ">"
   Just fs -> ppFormulaList unicode calc fs -- show the formulas
 ppFormulaInst' unicode calc formBindings termBindings (ZeroaryOpPat op) = pickPair unicode (getNames op)
+ppFormulaInst' unicode calc formBindings termBindings (UnaryOpPat op s) =
+  pickPair unicode (getNames op) ++ ppFormulaInst' unicode calc formBindings termBindings s
 ppFormulaInst' unicode calc formBindings termBindings (BinaryOpPat op s t) =
   "(" ++ ppFormulaInst' unicode calc formBindings termBindings s ++
   " " ++ pickPair unicode (getNames op) ++ " " ++
@@ -165,14 +187,15 @@ ppFormulaInst' unicode calc formBindings termBindings (SubstPat x t s) =
   in sStr ++ "(" ++ tStr ++ "/" ++ xStr ++ ")"
 ppFormulaInst' unicode calc formBindings termBindings (NoFreePat x s) =
   case lookup x termBindings of
-    Nothing -> ppFormulaInst' unicode calc formBindings termBindings s ++ "[no free <" ++ x ++ "> ]"
-    Just (VarTerm y) -> ppFormulaInst' unicode calc formBindings termBindings s ++ "[no free " ++ y ++ "]"
+    Nothing -> ppFormulaInst' unicode calc formBindings termBindings s
+    Just (VarTerm y) -> ppFormulaInst' unicode calc formBindings termBindings s
 
 -- | Given a (possibly incomplete) assignment and a formula pattern, pretty print the
 -- instantiation.
 
 -- TODO: Add another case for FormPat, NoFreePat and SubstPat, where we look up the
--- binding. NoFreePat and SubstPat should call the non-quoted ppFormulaInst recursively.
+-- binding. NoFreePat and SubstPat should call the non-quoted ppFormulaInst
+-- recursively.
 ppFormulaInst :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> String
 ppFormulaInst unicode calc formBindings termBindings (BinaryOpPat op s t) =
   ppFormulaInst' unicode calc formBindings termBindings s ++
@@ -284,6 +307,7 @@ ppGoalSpec [] = "top"
 ppGoalSpec gs = intercalate "." (map show gs)
 
 -- | \"Pretty\" print a derivation.
+
 ppDerivation :: Bool -> Calculus -> Derivation -> String
 ppDerivation unicode calc = ppDerivation' unicode "" [] where
   ppDerivation' unicode pad spec (Stub conclusion) =
@@ -297,9 +321,8 @@ ppDerivation unicode calc = ppDerivation' unicode "" [] where
           ppPremises spec n (prem:prems) =
             ppDerivation' unicode (pad++"  ") (spec ++ [n]) prem : ppPremises spec (n+1) prems
 
--- Pretty printing a derivation
--- TODO: put an asterisk at the current subgoal
--- TODO: maybe move some of these printing functions to a separate file (Main?)
+-- Pretty printing a derivation as a tree
+-- TODO: print axioms with line above rather than with brackets.
 ppDerivationTree' :: Bool -> Calculus -> GoalSpec -> Derivation -> GoalSpec -> String
 ppDerivationTree' unicode calc subgoal (Stub conclusion) spec =
   ppSequent unicode calc conclusion ++ if spec == subgoal then "*\n" else "\n"

@@ -1,3 +1,13 @@
+{-|
+Module      : Parse
+Description : Parsing.
+Copyright   : (c) Ben Selfridge, 2017
+License     : BSD3
+Maintainer  : benselfridge@gmail.com
+Stability   : experimental
+
+-}
+
 module Parse where
 
 import Calculus
@@ -170,8 +180,16 @@ bAbbrevFormula calc bAbbrev@(BAbbrev (UniName (aop, uop)) a b pat) = do
 baseFormula :: Calculus -> Parser Formula
 baseFormula calc = paren (formula calc) <|>
                    terminalFormula calc <|>
+                   asum (map (\op -> unaryOpFormula calc op) (calcUnaryOps calc)) <|>
                    asum (map (\abb -> uAbbrevFormula calc abb) (uAbbrevs calc)) <|>
                    asum (map (\qt -> quantFormula calc qt) (calcQts calc))
+
+unaryOpFormula :: Calculus -> UniName -> Parser Formula
+unaryOpFormula calc op@(UniName (aop, uop)) = do
+  string aop <|> string uop
+  spaces
+  sf <- baseFormula calc
+  return $ UnaryOp op sf
 
 uAbbrevFormula :: Calculus -> UAbbrev -> Parser Formula
 uAbbrevFormula calc uAbbrev@(UAbbrev (UniName (aop, uop)) a pat) = do

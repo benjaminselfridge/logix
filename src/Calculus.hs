@@ -39,6 +39,7 @@ module Calculus
   , uAbbreviateForm
   , bAbbreviateForm
   , calcZeroaryOps
+  , calcUnaryOps
   , calcBinaryOps
   , calcQts
   , instFormulaPat
@@ -54,6 +55,7 @@ module Calculus
   , applicableRules
   , instAxiom
   , instRule
+  , tryFormula
   , tryAxiom
   , tryRule
   , checkDerivation
@@ -85,21 +87,45 @@ instance Show Term where
 --------------------------------------------------------------------------------
 -- | Represents a single formula in predicate calculus.
 
+-- TODO: for unary ops, add the ability for a bracket notation <> or [], etc. instead
+-- of prefix. make a new datatype called "UnaryOpSym" or something that has two
+-- cases, one for prefix and one for bracket. Then thread that through everything
+-- (yuck).
+
+data Formula = Pred String [Term]
+             | ZeroaryOp { formulaOp :: UniName }
+             -- ^ General 0-ary connective, like bottom.
+             | UnaryOp { formulaOp :: UniName, formulaA :: Formula }
+             -- ^ General 1-ary prefix connective, like negation or "box" in modal
+             -- logic.
+             | BinaryOp { formulaOp :: UniName
+                        , formulaA  :: Formula
+                        , formulaB  :: Formula
+                        }
+             -- ^ General 2-ary infix connective, like & or ->.
+             | Quant { formulaQt :: UniName
+                     , formulax  :: String
+                     , formulaA  :: Formula
+                     }
+             -- ^ General quantified formula; forall or exists are the obvious ones.
+  deriving (Eq, Show)
+
 newtype UniName = UniName { getNames :: (String, String)
                             -- ^ first is ASCII, second is Unicode
                           }
   deriving (Eq, Show)
 
-data Formula = Pred String [Term]
-             | ZeroaryOp UniName
-             -- ^ something like Bottom.
-             | UnaryOp UniName Formula
-             | BinaryOp UniName Formula Formula
-             -- ^ first arg is the name for the op
-             | Quant UniName String Formula
-             -- ^ first arg is the name for the quantifier, second is the name of the
-             -- variable
-  deriving (Eq, Show)
+isZeroaryOp :: UniName -> Formula -> Bool
+isZeroaryOp op (ZeroaryOp op') = op == op'
+isZeroaryOp _ _ = False
+
+isUnaryOp :: UniName -> Formula -> Bool
+isUnaryOp op (UnaryOp op' _) = op == op'
+isUnaryOp _ _ = False
+
+isBinaryOp :: UniName -> Formula -> Bool
+isBinaryOp op (BinaryOp op' _ _) = op == op'
+isBinaryOp _ _ = False
 
 --------------------------------------------------------------------------------
 -- substitutions
@@ -289,8 +315,10 @@ instFormulaPat formBindings termBindings (NoFreePat x s) = do
 -- | Same as tryFormula, but for SequentPats.
 trySequent :: FormulaAssignment -> TermAssignment -> SequentPat -> ([FormulaPat], [TermPat])
 trySequent formBindings termBindings (ants ::=> sucs) =
-  tryFormulas' formBindings termBindings ants `appendPair` tryFormulas' formBindings termBindings sucs
-  where tryFormulas' formBindings termBindings pats = concatPairs $ map (tryFormula formBindings termBindings) pats
+  tryFormulas' formBindings termBindings ants `appendPair`
+  tryFormulas' formBindings termBindings sucs
+  where tryFormulas' formBindings termBindings pats =
+          concatPairs $ map (tryFormula formBindings termBindings) pats
 
 -- | Same as instFormulaPat, but for SequentPats.
 instSequentPat :: FormulaAssignment -> TermAssignment -> SequentPat -> Maybe Sequent
@@ -331,26 +359,41 @@ mergeTermAssignments [] = return []
 
 -- | Take a list of patterns and a list of formulas to match, and produce a list
 -- of all satisfying assignments.
+
+-- TODO: figure out the right way to map an outer pattern over an internal set
+-- pattern to do something like !Gamma.
 match :: [FormulaPat] -> [Formula] -> [(FormulaAssignment,TermAssignment)]
-match (ZeroaryOpPat op:pats) fs =
-  [matchRest | ZeroaryOp op <- nub fs
-             , fs'       <- [delete (ZeroaryOp op) fs]
+match (ZeroaryOpPat op:pats) fs = do
+  [matchRest | ZeroaryOp op' <- nub fs
+             , op == op'
+             , fs' <- [delete (ZeroaryOp op) fs]
              , matchRest <- match pats fs']
 match ((UnaryOpPat op pat):pats) fs =
-  [(mergeForms, mergeTerms) | UnaryOp op' c <- nub fs
-                            , op == op'
-                            , (cForms, cTerms) <- match [pat] [c]
-                            , (matchForms, matchTerms) <- match pats (delete (UnaryOp op c) fs)
-                            , mergeForms <- mergeFormulaAssignments [cForms, matchForms]
-                            , mergeTerms <- mergeTermAssignments [cTerms, matchTerms]]
+  [(mergeForms, mergeTerms) | fs' <- nub $ powerset $ filter (isUnaryOp op) fs
+                            , (aForms, aTerms) <- match [pat] (map formulaA fs')
+                            , (matchForms, matchTerms) <- match pats (fs \\ fs')
+                            , mergeForms <- mergeFormulaAssignments [aForms, matchForms]
+                            , mergeTerms <- mergeTermAssignments [aTerms, matchTerms]]
+  -- [(mergeForms, mergeTerms) | UnaryOp op' c <- nub fs
+  --                           , op == op'
+  --                           , (cForms, cTerms) <- match [pat] [c]
+  --                           , (matchForms, matchTerms) <- match pats (delete (UnaryOp op c) fs)
+  --                           , mergeForms <- mergeFormulaAssignments [cForms, matchForms]
+  --                           , mergeTerms <- mergeTermAssignments [cTerms, matchTerms]]
 match ((BinaryOpPat op pat1 pat2):pats) fs =
-  [(mergeForms, mergeTerms) | BinaryOp op' c1 c2 <- nub fs
-                            , op == op'
-                            , (c1Forms, c1Terms) <- match [pat1] [c1]
-                            , (c2Forms, c2Terms) <- match [pat2] [c2]
-                            , (matchForms, matchTerms) <- match pats (delete (BinaryOp op c1 c2) fs)
-                            , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
-                            , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
+  [(mergeForms, mergeTerms) | fs' <- nub $ powerset $ filter (isBinaryOp op) fs
+                            , (aForms, aTerms) <- match [pat1] (map formulaA fs')
+                            , (bForms, bTerms) <- match [pat2] (map formulaB fs')
+                            , (matchForms, matchTerms) <- match pats (fs \\ fs')
+                            , mergeForms <- mergeFormulaAssignments [aForms, bForms, matchForms]
+                            , mergeTerms <- mergeTermAssignments [aTerms, bTerms, matchTerms]]
+  -- [(mergeForms, mergeTerms) | BinaryOp op' c1 c2 <- nub fs
+  --                           , op == op'
+  --                           , (c1Forms, c1Terms) <- match [pat1] [c1]
+  --                           , (c2Forms, c2Terms) <- match [pat2] [c2]
+  --                           , (matchForms, matchTerms) <- match pats (delete (BinaryOp op c1 c2) fs)
+  --                           , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
+  --                           , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
 match ((QuantPat qt x pat):pats) fs =
   [(mergeForms, mergeTerms) | Quant qt' y f <- nub fs
                             , qt == qt'

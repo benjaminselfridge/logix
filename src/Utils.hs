@@ -1,7 +1,6 @@
 {-|
 Module      : Utils
-Description : Package for defining sequent calculi, and for proof checking and
-              generation.
+Description : Utility functions
 Copyright   : (c) Ben Selfridge, 2017
 License     : BSD3
 Maintainer  : benselfridge@gmail.com

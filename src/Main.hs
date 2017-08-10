@@ -1,3 +1,13 @@
+{-|
+Module      : Main
+Description : Command line logix tool.
+Copyright   : (c) Ben Selfridge, 2017
+License     : BSD3
+Maintainer  : benselfridge@gmail.com
+Stability   : experimental
+
+-}
+
 module Main where
 
 import Calculus
@@ -108,7 +118,7 @@ setTopGoal env arg =
   if null goalString
   then do putStrLn $ ppSequent (unicode env) (calculus env) $ conclusion (goal env)
           return env
-  else case parse (sequent (calculus env) <* end) goalString of
+  else case parse (spaces *> sequent (calculus env) <* spaces <* end) goalString of
     [] -> do putStrLn $ "Couldn't parse sequent \"" ++ goalString ++ "\"."
              return env
     -- TODO: Figure out why there might be multiple parses here (I know why but look
@@ -201,6 +211,7 @@ check env _ = do
       putStrLn $ "Valid derivation in " ++ calcName (calculus env)
   return env
 
+-- TODO: figure out why we can get multiple identical parses
 getFormBindings :: Bool -> Calculus -> [FormulaPat] -> IO FormulaAssignment
 getFormBindings unicode _ [] = return []
 getFormBindings unicode calc (PredPat p:pats) = do
@@ -213,7 +224,9 @@ getFormBindings unicode calc (PredPat p:pats) = do
              getFormBindings unicode calc (PredPat p:pats)
     [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (p, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
+    ((f,_):_) -> do rest <- getFormBindings unicode calc pats
+                    return $ (p, [f]) : rest
+--    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
 getFormBindings unicode calc (FormPat a:pats) = do
   putStr $ "Need binding for variable " ++ a ++ ":\n  " ++ a ++ " ::= "
   hFlush stdout
@@ -224,7 +237,9 @@ getFormBindings unicode calc (FormPat a:pats) = do
              getFormBindings unicode calc (FormPat a:pats)
     [(f,_)] -> do rest <- getFormBindings unicode calc pats
                   return $ (a, [f]) : rest
-    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
+    ((f,_):_) -> do rest <- getFormBindings unicode calc pats
+                    return $ (a, [f]) : rest
+--    x -> error $ "multiple parses for atom: " ++ ppFormulaList unicode calc (map fst x)
 getFormBindings unicode calc (SetPat gamma:pats) = do
   putStr $ "Need binding for formula list " ++ gamma ++ ":\n  " ++ gamma ++ " ::= "
   hFlush stdout
@@ -235,7 +250,9 @@ getFormBindings unicode calc (SetPat gamma:pats) = do
              getFormBindings unicode calc (SetPat gamma:pats)
     [(fs,_)] -> do rest <- getFormBindings unicode calc pats
                    return $ (gamma, fs) : rest
-    x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode calc) (map fst x))
+    ((fs,_):_) -> do rest <- getFormBindings unicode calc pats
+                     return $ (gamma, fs) : rest
+--    x -> error $ "multiple parses for atom: " ++ intercalate ", " (map (ppFormulaList unicode calc) (map fst x))
 getFormBindings unicode calc (pat:_) = error $ "can't bind pattern " ++ ppFormulaPat unicode pat
 
 getTermBindings :: Bool -> [TermPat] -> IO TermAssignment
@@ -279,11 +296,14 @@ rule env arg =
   if null ruleString
   then do putStrLn "Applicable rules: "
           let rules = applicableRules (calculus env) $ conclusion $ getCurrentGoal env
-          mapM_ putStrLn (showRules 1 rules)
+          let zRules = zipRules rules
+          mapM_ putStrLn (showZipRules zRules)
           return env
   else do let rules = applicableRules (calculus env) $ conclusion $ getCurrentGoal env
           case rules !!! (ruleNum-1) of
-            Nothing -> do putStrLn $ "No rule corresponding to " ++ ruleString
+            Nothing -> do let rules = applicableRules (calculus env) $ conclusion $ getCurrentGoal env
+                          let zRules = filter (\(_,(name,_,_)) -> name == ruleString) $ zipRules rules
+                          mapM_ putStrLn (showZipRules zRules)
                           return env
             Just (name, formBinding, termBinding) -> do
               -- TODO: fix this. tryRule returns a list of unbound terms as well.
@@ -312,7 +332,7 @@ rule env arg =
         ruleNum = case readMaybe ruleString of
                     Just num -> num
                     Nothing  -> 0
-        showRule n (name, formBinding, termBinding) =
+        showRule (n, (name, formBinding, termBinding)) =
           case prems of
             [] ->
               "  " ++ show n ++ ". " ++ name ++ " with no obligations"
@@ -323,8 +343,8 @@ rule env arg =
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++
               intercalate "\n     " (map (ppSequentInst (unicode env) (calculus env) formBinding termBinding) prems)
           where Just (prems, _) = lookup name (rules (calculus env))
-        showRules n [] = []
-        showRules n (x:xs) = showRule n x : showRules (n+1) xs
+        zipRules rules = zip [1..] rules
+        showZipRules rules = map showRule rules
 
 -- TODO: add term binding machinery for rules to axioms as well.
 axiom :: Env -> String -> IO Env

@@ -1,7 +1,6 @@
 {-|
-Module      : Sequent
-Description : Package for defining sequent calculi, and for proof checking and
-              generation.
+Module      : Calculi
+Description : Definitions of sequent calculi for use in logix.
 Copyright   : (c) Ben Selfridge, 2017
 License     : BSD3
 Maintainer  : benselfridge@gmail.com
@@ -19,11 +18,6 @@ module Calculi
   , impliesForm
   , forallForm
   , existsForm
-  , andPat
-  , orPat
-  , impliesPat
-  , forallPat
-  , existsPat
   ) where
 
 import Calculus
@@ -50,7 +44,7 @@ forallForm  = Quant (UniName ("forall ","∀"))
 existsForm  = Quant (UniName ("exists ","∃"))
 
 -- connective patterns
-botpat     = ZeroaryOpPat (UniName ("_|_", "⊥"))
+botPat     = ZeroaryOpPat (UniName ("_|_", "⊥"))
 andPat     = BinaryOpPat (UniName ("&","&"))
 orPat      = BinaryOpPat (UniName ("|","∨"))
 impliesPat = BinaryOpPat (UniName ("->","⊃"))
@@ -70,7 +64,7 @@ delta  = SetPat "Δ"
 delta' = SetPat "Δ'"
 
 -- abbreviations
-neg = UAbbrev (UniName ("~", "¬")) "A" (impliesPat a botpat)
+neg = UAbbrev (UniName ("~", "¬")) "A" (impliesPat a botPat)
 iff = BAbbrev (UniName ("<->", "↔")) "A" "B" (andPat (impliesPat a b) (impliesPat b a))
 
 -- quantifier and subst patterns
@@ -107,7 +101,7 @@ g3c = Calculus {
   , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
              [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [delta]))
+              [botPat, gamma] ::=> [delta]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
             [forall_x_a, gamma] ::=> [delta]))
   , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
@@ -141,7 +135,7 @@ g3i = Calculus {
   , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
              [a $> b, gamma] ::=> [c]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [c]))
+              [botPat, gamma] ::=> [c]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
             [ forall_x_a, gamma] ::=> [c]))
   , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
@@ -167,7 +161,7 @@ g0c = Calculus {
   , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
                 [gamma] ::=> [delta, a $> b]))
   , ("L_|_", ([ ],
-              [botpat] ::=> [c]))
+              [botPat] ::=> [c]))
   , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
                 [a $& b, gamma] ::=> [delta]))
   , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma'] ::=> [delta'] ],
@@ -215,7 +209,7 @@ g0i = Calculus {
   , ("L->", ([ [gamma] ::=> [a], [b, delta] ::=> [c] ],
              [a $> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
-              [botpat] ::=> [c]))
+              [botPat] ::=> [c]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
             [ forall_x_a, gamma] ::=> [c]))
   , ("Rforall", ([ [gamma] ::=> [a_x_y] ],
@@ -251,7 +245,7 @@ g3ipm = Calculus {
   , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [delta] ],
              [a $> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [delta]))
+              [botPat, gamma] ::=> [delta]))
   ],
   uAbbrevs = [neg],
   bAbbrevs = [iff]
@@ -283,70 +277,8 @@ g4ip = Calculus {
   , ("L->>", ([ [c, d $> b, gamma] ::=> [d], [b, gamma] ::=> [e] ],
               [(c $> d) $> b, gamma] ::=> [e]))
   , ("L_|_", ([],
-              [botpat, gamma] ::=> [c]))
+              [botPat, gamma] ::=> [c]))
   ],
   uAbbrevs = [neg],
   bAbbrevs = [iff]
   }
-
--- Sequent calculus presentation of linear logic
-
--- formula connectives
--- botForm     = ZeroaryOp (UniName ("_|_", "⊥"))
-topForm      = ZeroaryOp (UniName ("T","⊤"))
-oneForm      = ZeroaryOp (UniName ("1","1"))
-zeroForm     = ZeroaryOp (UniName ("0","0"))
-dualForm     = UnaryOp (UniName ("~","¬"))
-ofCourseForm = UnaryOp (UniName ("!","!"))
-whyNotForm   = UnaryOp (UniName ("?","?"))
-timesForm    = BinaryOp (UniName ("*","⊗"))
-plusForm     = BinaryOp (UniName ("+","⊕"))
-withForm     = BinaryOp (UniName ("&","*"))
-parForm      = BinaryOp (UniName ("&&", "⅋"))
-
--- connective patterns
-topPat      = ZeroaryOpPat (UniName ("T","⊤"))
-onePat      = ZeroaryOpPat (UniName ("1","1"))
-zeroPat     = ZeroaryOpPat (UniName ("0","0"))
-dualPat     = UnaryOpPat (UniName ("~","¬"))
-ofCoursePat = UnaryOpPat (UniName ("!","!"))
-whyNotPat   = UnaryOpPat (UniName ("?","?"))
-timesPat    = BinaryOpPat (UniName ("*","⊗"))
-plusPat     = BinaryOpPat (UniName ("+","⊕"))
-withPat     = BinaryOpPat (UniName ("&","*"))
-parPat      = BinaryOpPat (UniName ("&&", "⅋"))
-
-linear :: Calculus
-linear = Calculus {
-  calcName = "linear",
-  axioms = [("Init", [] ::=> [a, dualPat a])],
-  rules =
-  [ ("MConj", ([ [] ::=> [gamma, a], [] ::=> [delta, b] ],
-                 [] ::=> [gamma, delta, a `timesPat` b]))
-  ],
-  uAbbrevs = [],
-  bAbbrevs = []
-  }
-
--- -- Adapted from Kleene, Mathematical Logic.
--- hilbert :: Calculus
--- hilbert = Calculus {
---   calcName = "Hilbert",
---   axioms =
---   [ ("H1",   [] ::=> [a $> (b $> a)])
---   , ("H2",   [] ::=> [(a $> b) $> ((a $> (b $> c)) $> (a $> c))])
---   , ("H3",   [] ::=> [a $> (b $> (a $& b))])
---   , ("H4a",  [] ::=> [(a $& b) $> a])
---   , ("H4b",  [] ::=> [(a $& b) $> b])
---   , ("H5a",  [] ::=> [a $> (a $| b)])
---   , ("H5b",  [] ::=> [b $> (a $| b)])
---   , ("H6",   [] ::=> [(a $> c) $> ((b $> c) $> ((a $| b) $> c))])
---   , ("H7",   [] ::=> [(a $> b) $> ((a $> negpat b) $> negpat a)])
---   , ("H8",   [] ::=> [negpat (negpat a) $> a])
---   , ("H9",   [] ::=> [(a $> b) $> ((b $> a) $> (a $<> b))])
---   , ("H10a", [] ::=> [(a $<> b) $> (a $> b)])
---   , ("H10b", [] ::=> [(a $<> b) $> (b $> a)])
---   ],
---   rules = [("MP", ([ [] ::=> [a], [] ::=> [a $> b] ],
---                    [] ::=> [b]))]
--- }

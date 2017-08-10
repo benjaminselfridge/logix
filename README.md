@@ -53,12 +53,12 @@ you can start it up as follows:
 
 ```
 $ logix
-LogiX (Logic Explorer) v. 0.2.0
-interactive proof assistant for sequent calculi
+LogiX (Logic Explorer) v0.2.1
+a customizable proof construction tool for sequent calculi
 (c) Ben Selfridge 2017
 
 Type "help" for a list of commands.
->
+> 
 ```
 
 For a full list of commands, type `help`. The only thing you need to know that
@@ -88,18 +88,12 @@ By default, logix displays sequents using unicode symbols for all these connecti
 but you can turn that off with the `unicode` command.
 
 If you enter the sequent incorrectly, logix will report a parse error and not give
-you any helpful information. logix can automatically parenthesize expressions; ~,
-forall and exists bind the tightest, then & and |, then ->, and finally <-> binds the
-loosest. Every binary connective is right associative:
-
-```
-> top => a -> b & c & d -> a
-Changing goal to " ⇒ a ⊃ ((b & (c & d)) ⊃ a)".
-```
+you any helpful information.
 
 We note here that the logical connectives used in the examples above are specific to
-the calculi that come built-in with logix, and are not built-in. Every calculus in
-logic is defined completely separately from the core deduction engine.
+the particular calculi that come with logix in src/Calculi.hs, and are not
+built-in. Every calculus in logix is defined completely separately from the core
+deduction engine.
 
 ## Extending logix
 
