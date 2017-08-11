@@ -15,10 +15,12 @@ Ranta](http://www.cse.chalmers.se/~aarne/). logix was intended to be like PESCA,
 but with more general capabilities and a slightly more intuitive interface.
 
 logix is intended to be very extensible. I tried to take as little for granted as
-possible about the target theory; even the primitive connectives are customizable;
-for instance, & and | come as components of built-in calculi, but you can extend
-logix by defining your own primitive operators and deduction rules in the source code
-(src/Calculi.hs). I put a lot of effort into making sure that defining new sequent
+possible about the target theory, so even the primitive connectives are customizable.
+For instance, & and | come with logix for certain built-in calculi, but you can
+extend logix by defining your own primitive operators and deduction rules in the
+source code (src/Calculi.hs). The notion of conjunction and disjunction live solely
+in that file; the rest of logix is totally agnostic about what symbols you use, and
+what they mean. I put a lot of effort into making sure that defining new sequent
 calculi was as straightforward and obvious as possible.
 
 ### What's the point?

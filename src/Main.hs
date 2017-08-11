@@ -459,8 +459,7 @@ repl env = do
 introMessage :: String
 introMessage =
   "LogiX (Logic Explorer) v" ++ version ++ "\n" ++
-  "a customizable proof construction tool for sequent calculi\n" ++
-  "(c) Ben Selfridge 2017\n\n" ++
+  "a customizable proof construction tool for sequent calculi\n\n" ++
   "Type \"help\" for a list of commands.\n"
 
 main :: IO ()

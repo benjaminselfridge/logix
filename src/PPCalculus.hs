@@ -29,31 +29,6 @@ import Utils
 
 import Data.List (nub, intercalate)
 
-spliceStrings :: String -> String -> String
-spliceStrings x y = unlines xyLines
-  where xLines = lines x
-        yLines = lines y
-        (xLines', yLines') = sync xLines yLines
-        xWidth = case xLines of (_:_) -> maximum (map length xLines)
-                                _     -> 0
-        yWidth = case yLines of (_:_) -> maximum (map length yLines)
-                                _     -> 0
-        xLines'' = map (extend xWidth) xLines'
-        yLines'' = map (extend yWidth) yLines'
-        xyLines = case (xWidth, yWidth) of
-                    (0, _) -> yLines''
-                    (_, 0) -> xLines''
-                    _      -> zipWith (\l1 l2 -> l1 ++ sep ++ l2) xLines'' yLines''
-        sync xs ys | length xs < length ys = (replicate (length ys - length xs) [] ++ xs, ys)
-        sync xs ys | otherwise = (xs, replicate (length xs - length ys) [] ++ ys)
-        extend 0 line   = line
-        extend n []     = ' ' : extend (n-1) []
-        extend n (x:xs) = x   : extend (n-1) xs
-        sep = " | "
-
-padL :: Int -> String -> String
-padL n = (unlines . map (replicate n ' '++) . lines)
-
 --------------------------------------------------------------------------------
 -- pretty printing
 
@@ -201,15 +176,24 @@ ppFormulaInst' unicode calc formBindings termBindings (NoFreePat x s) =
 -- binding. NoFreePat and SubstPat should call the non-quoted ppFormulaInst
 -- recursively.
 ppFormulaInst :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> [String]
+-- Maybe add another case for SetPat where we look up the thing directly and call
+-- ppFormula on it.
 ppFormulaInst unicode calc formBindings termBindings (BinaryOpPat op s t) =
-  ["(" ++ a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ b ++ ")" |
+  [a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ b |
     a <- ppFormulaInst' unicode calc formBindings termBindings s
   , b <- ppFormulaInst' unicode calc formBindings termBindings t]
+  -- ["(" ++ a ++ " " ++ pickPair unicode (getNames op) ++ " " ++ b ++ ")" |
+  --   a <- ppFormulaInst' unicode calc formBindings termBindings s
+  -- , b <- ppFormulaInst' unicode calc formBindings termBindings t]
 ppFormulaInst unicode calc formBindings termBindings (FormPat a) =
   case lookup a formBindings of
     Nothing   -> ["<" ++ a ++ ">"]
     Just [f]  -> [ppFormula unicode calc f]
-    _         -> error "ppFormulaInst: variable bound to multiple formulas"
+    Just fs   -> error $ "ppFormulaInst: variable bound to multiple formulas" ++ ppFormulaList unicode calc fs
+ppFormulaInst unicode calc formBindings termBindings (SetPat g) =
+  case lookup g formBindings of
+    Nothing -> ["<" ++ g ++ ">"]
+    Just fs -> map (ppFormula unicode calc) fs
 ppFormulaInst unicode calc formBindings termBindings pat = ppFormulaInst' unicode calc formBindings termBindings pat
 
 -- | Given a (possibly incomplete) assignment and a sequent pattern, pretty print the
@@ -328,13 +312,39 @@ ppDerivation unicode calc = ppDerivation' unicode "" [] where
           ppPremises spec n (prem:prems) =
             ppDerivation' unicode (pad++"  ") (spec ++ [n]) prem : ppPremises spec (n+1) prems
 
+spliceStrings :: String -> String -> String
+spliceStrings x y = unlines xyLines
+  where xLines = lines x
+        yLines = lines y
+        (xLines', yLines') = sync xLines yLines
+        xWidth = case xLines of (_:_) -> maximum (map length xLines)
+                                _     -> 0
+        yWidth = case yLines of (_:_) -> maximum (map length yLines)
+                                _     -> 0
+        xLines'' = map (extend xWidth) xLines'
+        yLines'' = map (extend yWidth) yLines'
+        xyLines = case (xWidth, yWidth) of
+                    (0, _) -> yLines''
+                    (_, 0) -> xLines''
+                    _      -> zipWith (\l1 l2 -> l1 ++ sep ++ l2) xLines'' yLines''
+        sync xs ys | length xs < length ys = (replicate (length ys - length xs) [] ++ xs, ys)
+        sync xs ys | otherwise = (xs, replicate (length xs - length ys) [] ++ ys)
+        extend 0 line   = line
+        extend n []     = ' ' : extend (n-1) []
+        extend n (x:xs) = x   : extend (n-1) xs
+        sep = " | "
+
+padL :: Int -> String -> String
+padL n = (unlines . map (replicate n ' '++) . lines)
+
 -- Pretty printing a derivation as a tree
--- TODO: print axioms with line above rather than with brackets.
 ppDerivationTree' :: Bool -> Calculus -> GoalSpec -> Derivation -> GoalSpec -> String
 ppDerivationTree' unicode calc subgoal (Stub conclusion) spec =
   ppSequent unicode calc conclusion ++ if spec == subgoal then "*\n" else "\n"
 ppDerivationTree' unicode calc subgoal (Axiom conclusion axiom _ _) spec =
-  "[" ++ ppSequent unicode calc conclusion ++ "]" ++ if spec == subgoal then "*\n" else "\n"
+  let concString = ppSequent unicode calc conclusion ++ if spec == subgoal then "*" else ""
+      width = length concString
+  in replicate width '-' ++ "\n" ++ concString ++ "\n"
 ppDerivationTree' unicode calc subgoal (Der conclusion rule _ _ ders) spec =
   let newSpecs = zipWith (++) (repeat spec) (map (:[]) [1..length ders])
       ppDers = zipWith (ppDerivationTree' unicode calc subgoal) ders newSpecs

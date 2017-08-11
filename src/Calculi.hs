@@ -30,7 +30,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3i, g0c, g0i, g3ipm, g4ip, wll]
+calculi = [g3ip, g3ip_em, wll]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -65,6 +65,7 @@ delta' = SetPat "Δ'"
 
 -- abbreviations
 neg = UAbbrev (UniName ("~", "¬")) "A" (impliesPat a botPat)
+negPat x = impliesPat x botPat
 iff = BAbbrev (UniName ("<->", "↔")) "A" "B" (andPat (impliesPat a b) (impliesPat b a))
 
 -- quantifier and subst patterns
@@ -85,7 +86,7 @@ nofree_y = NoFreePat "y"
 
 g3c :: Calculus
 g3c = Calculus {
-  calcName = "G3c",
+  calcName = "g3c",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
@@ -117,7 +118,7 @@ g3c = Calculus {
 
 g3i :: Calculus
 g3i = Calculus {
-  calcName = "G3i",
+  calcName = "g3i",
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
@@ -149,9 +150,63 @@ g3i = Calculus {
   bAbbrevs = [iff]
   }
 
+g3ip :: Calculus
+g3ip = Calculus {
+  calcName = "g3ip",
+  axioms = [("Axiom", [p, gamma] ::=> [p])],
+  rules =
+  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
+            [gamma] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
+            [a $| b, gamma] ::=> [c]))
+  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a $> b, gamma] ::=> [c]))
+  , ("L_|_", ([],
+              [botPat, gamma] ::=> [c]))
+  ],
+  uAbbrevs = [neg],
+  bAbbrevs = [iff]
+  }
+
+g3ip_em :: Calculus
+g3ip_em = Calculus {
+  calcName = "g3ip_em",
+  axioms = [("Axiom", [p, gamma] ::=> [p])],
+  rules =
+  [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
+            [gamma] ::=> [a $& b]))
+  , ("R|1", ([ [gamma] ::=> [a] ],
+             [gamma] ::=> [a $| b]))
+  , ("R|2", ([ [gamma] ::=> [b] ],
+             [gamma] ::=> [a $| b]))
+  , ("R->", ([ [a, gamma] ::=> [b] ],
+             [gamma] ::=> [a $> b]))
+  , ("L&", ([ [a, b, gamma] ::=> [c] ],
+            [a $& b, gamma] ::=> [c]))
+  , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
+            [a $| b, gamma] ::=> [c]))
+  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a $> b, gamma] ::=> [c]))
+  , ("L_|_", ([],
+              [botPat, gamma] ::=> [c]))
+  , ("EM", ([ [p, gamma] ::=> [c], [negPat p, gamma] ::=> [c] ],
+            [gamma] ::=> [c]))
+  ],
+  uAbbrevs = [neg],
+  bAbbrevs = [iff]
+  }
+
 g0c :: Calculus
 g0c = Calculus {
-  calcName = "G0c",
+  calcName = "g0c",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma'] ::=> [delta', b] ],
@@ -191,7 +246,7 @@ g0c = Calculus {
 
 g0i :: Calculus
 g0i = Calculus {
-  calcName = "G0i",
+  calcName = "g0i",
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
@@ -229,7 +284,7 @@ g0i = Calculus {
 
 g3ipm :: Calculus
 g3ipm = Calculus {
-  calcName = "G3ipm",
+  calcName = "g3ipm",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
@@ -253,7 +308,7 @@ g3ipm = Calculus {
 
 g4ip :: Calculus
 g4ip = Calculus {
-  calcName = "G4ip",
+  calcName = "g4ip",
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
@@ -292,7 +347,7 @@ g4ip = Calculus {
 
 -- Intuitionistic and linear assumptions. Linear assumptions are the default, so we
 -- just provide a unary op indicating that an assumption is intuitionistic. This is
--- like Wadler's [] notation, but we'll use ^ instead of brackets.
+-- like Wadler's [] notation, but we'll use * instead of brackets.
 
 intPat = UnaryOpPat (UniName ("*","*"))
 
@@ -300,7 +355,7 @@ intPat = UnaryOpPat (UniName ("*","*"))
 ofCoursePat = UnaryOpPat (UniName ("!","!"))
 
 -- binary operators
-lolPat = BinaryOpPat (UniName ("-o", "⊸"))
+lolPat = BinaryOpPat (UniName ("-o", "-o"))
 timesPat = BinaryOpPat (UniName ("x", "⊗"))
 plusPat = BinaryOpPat (UniName ("+", "⊕"))
 -- we also use andPat, above.

@@ -1,6 +1,6 @@
 {-|
 Module      : Calculus
-Description : Package for defining sequent calculi and constructing proofs within
+Description : Module for defining sequent calculi and constructing proofs within
               them.
 Copyright   : (c) Ben Selfridge, 2017
 License     : BSD3
@@ -66,9 +66,6 @@ import Utils
 
 import Data.List
 import Data.Maybe
-
--- TODO: There is no real reason to have specific and, or, implies, etc. We can
--- abstract that to generalized connectives with different arities.
 
 --------------------------------------------------------------------------------
 -- | Represents a single term in predicate calculus.
@@ -369,12 +366,6 @@ match ((UnaryOpPat op pat):pats) fs =
                             , (matchForms, matchTerms) <- match pats (fs \\ fs')
                             , mergeForms <- mergeFormulaAssignments [aForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [aTerms, matchTerms]]
-  -- [(mergeForms, mergeTerms) | UnaryOp op' c <- nub fs
-  --                           , op == op'
-  --                           , (cForms, cTerms) <- match [pat] [c]
-  --                           , (matchForms, matchTerms) <- match pats (delete (UnaryOp op c) fs)
-  --                           , mergeForms <- mergeFormulaAssignments [cForms, matchForms]
-  --                           , mergeTerms <- mergeTermAssignments [cTerms, matchTerms]]
 match ((BinaryOpPat op pat1 pat2):pats) fs =
   [(mergeForms, mergeTerms) | fs' <- nub $ powerset $ filter (isBinaryOp op) fs
                             , (aForms, aTerms) <- match [pat1] (map formulaA fs')
@@ -382,13 +373,6 @@ match ((BinaryOpPat op pat1 pat2):pats) fs =
                             , (matchForms, matchTerms) <- match pats (fs \\ fs')
                             , mergeForms <- mergeFormulaAssignments [aForms, bForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [aTerms, bTerms, matchTerms]]
-  -- [(mergeForms, mergeTerms) | BinaryOp op' c1 c2 <- nub fs
-  --                           , op == op'
-  --                           , (c1Forms, c1Terms) <- match [pat1] [c1]
-  --                           , (c2Forms, c2Terms) <- match [pat2] [c2]
-  --                           , (matchForms, matchTerms) <- match pats (delete (BinaryOp op c1 c2) fs)
-  --                           , mergeForms <- mergeFormulaAssignments [c1Forms, c2Forms, matchForms]
-  --                           , mergeTerms <- mergeTermAssignments [c1Terms, c2Terms, matchTerms]]
 match ((QuantPat qt x pat):pats) fs =
   [(mergeForms, mergeTerms) | Quant qt' y f <- nub fs
                             , qt == qt'
@@ -397,9 +381,9 @@ match ((QuantPat qt x pat):pats) fs =
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
 match ((PredPat p):pats) fs =
-  [(merge, matchTerms) | Pred p' ts <- nub fs
-                       , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
-                       , merge <- mergeFormulaAssignments [[(p, [Pred p' ts])], matchForms]]
+  [(mergeForms, matchTerms) | Pred p' ts <- nub fs
+                            , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
+                            , mergeForms <- mergeFormulaAssignments [[(p, [Pred p' ts])], matchForms]]
 match ((FormPat n):pats) fs =
   [(mergeForms, matchTerms) | y <- nub fs
                             , (matchForms, matchTerms) <- match pats (delete y fs)
@@ -413,8 +397,6 @@ match ((SubstPat x t n):pats) fs =
                             , (matchForms, matchTerms) <- match pats (delete y fs)
                             , mergeForms <- mergeFormulaAssignments [[(n,[y])], matchForms]]
 match ((NoFreePat x pat):pats) fs =
-  -- We can't check the no free part here because we don't yet know what actual
-  -- variable the metavariable x is going to be assigned to.
   [(mergeForms, mergeTerms) | fs' <- nub $ powerset fs
                             , (patForms, patTerms) <- match [pat] fs'
                             , (matchForms, matchTerms) <- match pats (fs \\ fs')
