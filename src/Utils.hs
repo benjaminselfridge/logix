@@ -44,3 +44,8 @@ setElt n x (y:ys) | n > 0 = y : (setElt (n-1) x ys)
 pickPair :: Bool -> (a,a) -> a
 pickPair False = fst
 pickPair True  = snd
+
+keyElem :: (Eq a) => a -> [(a,b)] -> Bool
+keyElem x pairs = case lookup x pairs of
+  Nothing -> False
+  Just _  -> True

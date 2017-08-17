@@ -87,6 +87,7 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
 -- want to display the no free pattern in ppCalculus. Perhaps as a one-liner
 -- immediately below the rule.
 ppFormulaPat' :: Bool -> FormulaPat -> String
+ppFormulaPat' unicode (ConcPredPat p ts) = p ++ "(" ++ intercalate ", " (map termPatId ts) ++ ")"
 ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
 ppFormulaPat' unicode (SetPat gamma) = gamma
@@ -115,6 +116,12 @@ ppSequentPat unicode (ants ::=> sucs) =
   " " ++ pickPair unicode (getNames sq) ++ " " ++
   intercalate ", " (map (ppFormulaPat unicode)  sucs)
 
+-- | Pretty print a (possibly incomplete) instantiation of a term pattern.
+ppTermInst :: TermAssignment -> TermPat -> String
+ppTermInst termBindings t = case lookup (termPatId t) termBindings of
+  Nothing -> "<" ++ termPatId t ++ ">"
+  Just t' -> show t'
+
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
 
 -- TODO: removed the [no free] tag in printing a formula inst, but we might want to
@@ -126,6 +133,8 @@ ppSequentPat unicode (ants ::=> sucs) =
 -- from ppFormulaInst', and map the operator over the list. However, we still have to
 -- think about how to do this for BinaryOps...
 ppFormulaInst' :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> [String]
+ppFormulaInst' unicode calc formBindings termBindings (ConcPredPat p ts) =
+  [p ++ "(" ++ intercalate ", " (map (ppTermInst termBindings) ts) ++ ")"]
 ppFormulaInst' unicode calc formBindings termBindings (PredPat p) = case lookup p formBindings of
   Nothing  -> ["<" ++ p ++ ">"] -- p is unbound
   Just [f] -> [ppFormula' unicode calc f]
@@ -154,12 +163,8 @@ ppFormulaInst' unicode calc formBindings termBindings (QuantPat qt x s) =
       map (((pickPair unicode (getNames qt)) ++ y ++ ".") ++) $
       ppFormulaInst' unicode calc formBindings termBindings s
 ppFormulaInst' unicode calc formBindings termBindings (SubstPat x t s) =
-  let xStr = case lookup x termBindings of
-               Nothing -> "<" ++ x ++ ">"
-               Just (VarTerm y) -> y
-      tStr = case lookup (termPatId t) termBindings of
-               Nothing -> "<" ++ termPatId t ++ ">"
-               Just t' -> show t'
+  let xStr = ppTermInst termBindings (VarPat x)
+      tStr = ppTermInst termBindings t
       sStr = case lookup s formBindings of
                Nothing -> "<" ++ s ++ ">"
                Just s' -> ppFormulaList unicode calc s'

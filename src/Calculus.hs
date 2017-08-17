@@ -197,6 +197,9 @@ data FormulaPat = ZeroaryOpPat UniName
                 | QuantPat UniName String FormulaPat
                 -- ^ General quantifier. The UniName is the name for the operator, which
                 -- provides both an ASCII and Unicode variant.
+                | ConcPredPat String [TermPat]
+                -- ^ Matches a particular atomic predicate or propositional variable,
+                -- along with a list of term patterns.
                 | PredPat String
                 -- ^ Matches any atomic predicate or propositional variable.
                 | FormPat String
@@ -230,6 +233,10 @@ type TermAssignment = [(String, Term)]
 -- | Given an assignment and a formula pattern, return a list of all the patterns in
 -- the formula that are unbound. Use this in conjunction with instFormulaPat.
 tryFormula :: FormulaAssignment -> TermAssignment -> FormulaPat -> ([FormulaPat], [TermPat])
+tryFormula formBindings termBindings (ConcPredPat p ts) =
+  -- Just return a list of all the unbound terms in ts.
+  ([], filter unboundTerm ts)
+  where unboundTerm t = keyElem (termPatId t) termBindings
 tryFormula formBindings termBindings (PredPat p) =
   case lookup p formBindings of
     Nothing -> ([PredPat p], [])
@@ -275,6 +282,9 @@ tryFormula formBindings termBindings (NoFreePat x s) = (sForms, xTerms ++ sTerms
 -- term levels should have corresponding bindings in the first arguments provided for
 -- this function.
 instFormulaPat :: FormulaAssignment -> TermAssignment -> FormulaPat -> Maybe [Formula]
+instFormulaPat _ termBindings (ConcPredPat p ts) = do
+  ts' <- sequence $ map (\t -> lookup (termPatId t) termBindings) ts
+  return [Pred p ts']
 instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
 instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
 instFormulaPat formBindings _ (SetPat g)  = lookup g formBindings
@@ -380,6 +390,11 @@ match ((QuantPat qt x pat):pats) fs =
                             , (matchForms, matchTerms) <- match pats (delete (Quant qt y f) fs)
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
+match ((ConcPredPat p ts):pats) fs =
+  [(matchForms, matchTerms) | Pred p' ts' <- nub fs
+                            , p == p'
+                            , length ts == length ts'
+                            , (matchForms, matchTerms) <- match pats (delete (Pred p' ts') fs)]
 match ((PredPat p):pats) fs =
   [(mergeForms, matchTerms) | Pred p' ts <- nub fs
                             , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
