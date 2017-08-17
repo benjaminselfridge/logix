@@ -87,6 +87,7 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
 -- want to display the no free pattern in ppCalculus. Perhaps as a one-liner
 -- immediately below the rule.
 ppFormulaPat' :: Bool -> FormulaPat -> String
+ppFormulaPat' unicode (ConcPredPat p []) = p
 ppFormulaPat' unicode (ConcPredPat p ts) = p ++ "(" ++ intercalate ", " (map termPatId ts) ++ ")"
 ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
@@ -133,6 +134,7 @@ ppTermInst termBindings t = case lookup (termPatId t) termBindings of
 -- from ppFormulaInst', and map the operator over the list. However, we still have to
 -- think about how to do this for BinaryOps...
 ppFormulaInst' :: Bool -> Calculus -> FormulaAssignment -> TermAssignment -> FormulaPat -> [String]
+ppFormulaInst' unicode calc formBindings termBindings (ConcPredPat p []) = [p]
 ppFormulaInst' unicode calc formBindings termBindings (ConcPredPat p ts) =
   [p ++ "(" ++ intercalate ", " (map (ppTermInst termBindings) ts) ++ ")"]
 ppFormulaInst' unicode calc formBindings termBindings (PredPat p) = case lookup p formBindings of

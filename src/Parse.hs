@@ -127,12 +127,7 @@ end = Parser (\cs -> case cs of
 -- Terms
 
 term :: Parser Term
-term = (constTerm <|> varTerm <|> appTerm)
-
-constTerm :: Parser Term
-constTerm = do char '_'
-               name <- many1 alphaNum
-               return $ ConstTerm name
+term = varTerm <|> appTerm
 
 varTerm :: Parser Term
 varTerm = do name <- many1 alphaNum

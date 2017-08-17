@@ -13,6 +13,7 @@ customize the software.
 
 module Calculi
   ( calculi
+  , graph
   , andForm
   , orForm
   , impliesForm
@@ -30,7 +31,7 @@ import Data.Char
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3ip, g3ip_em, wll]
+calculi = [graphdraw, coins, graph, g3c, g0c, wll]
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -84,33 +85,108 @@ nofree_y = NoFreePat "y"
 -- | Infix impliesPat.
 ($>) = impliesPat
 
+node = ConcPredPat "node"
+edge = ConcPredPat "edge"
+path = ConcPredPat "path"
+x = TermPat "x"
+y = TermPat "y"
+z = TermPat "z"
+
+graph :: Calculus
+graph = Calculus
+  { calcName = "graph"
+  , axioms = [ ("Ax", [p, gamma] ::=> [p]) ]
+  , rules =
+    [ ("sym",   ([[gamma] ::=> [edge [x,y]]]
+                , [gamma] ::=> [edge [y,x]]))
+    , ("refl",  ([[gamma] ::=> [node [x]]]
+                , [gamma] ::=> [path [x,x]]))
+    , ("e",     ([[gamma] ::=> [edge [x,y]]]
+                , [gamma] ::=> [path [x,y]]))
+    , ("trans", ([[gamma] ::=> [path [x,y]], [gamma] ::=> [path [y,z]]]
+                , [gamma] ::=> [path [x,z]]))
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
+  }
+
+at = ConcPredPat "at"
+graphdraw :: Calculus
+graphdraw = Calculus
+  { calcName = "graphdraw"
+  , axioms = [ ]
+  , rules =
+    [ ("step", ([[] ::=> [at [x]], [] ::=> [edge [x,y]]]
+               , [] ::=> [at [y]]))
+    , ("consume", ([[gamma,p] ::=> [delta]]
+                  , [gamma] ::=> [delta,p]))
+    , ("sym", ([[gamma] ::=> [edge [x,y]]]
+              , [gamma] ::=> [edge [y,x]]))
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
+  }
+
+nat :: Calculus
+nat = Calculus
+  { calcName = "nat"
+  , axioms = []
+  , rules =
+    [
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
+  }
+
+nickel = ConcPredPat "n" []
+dime = ConcPredPat "d" []
+quarter = ConcPredPat "q" []
+
+coins :: Calculus
+coins = Calculus
+  { calcName = "coins"
+  , axioms = []
+  , rules =
+    [ ("E1a", ([[] ::=> [delta, dime, dime, nickel]]
+              , [] ::=> [delta, quarter]))
+    , ("E1b", ([[] ::=> [delta, quarter]]
+              , [] ::=> [delta, dime, dime, nickel]))
+    , ("E2a", ([[] ::=> [delta, nickel, nickel]]
+              , [] ::=> [delta, dime]))
+    , ("E2b", ([[] ::=> [delta, dime]]
+              , [] ::=> [delta, nickel, nickel]))
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
+  }
+
 g3c :: Calculus
 g3c = Calculus {
   calcName = "g3c",
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
-  [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
-  , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
-  , ("R->", ([ [a, gamma] ::=> [delta, b] ],
-             [gamma] ::=> [delta, a $> b]))
-  , ("L&", ([ [a, b, gamma] ::=> [delta] ],
-            [a $& b, gamma] ::=> [delta]))
-  , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-            [a $| b, gamma] ::=> [delta]))
-  , ("L->", ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
-             [a $> b, gamma] ::=> [delta]))
-  , ("L_|_", ([],
-              [botPat, gamma] ::=> [delta]))
+  [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
+                [gamma] ::=> [delta, a $& b]))
+  , ("R|",   ([ [gamma] ::=> [delta, a, b] ],
+                [gamma] ::=> [delta, a $| b]))
+  , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
+                [gamma] ::=> [delta, a $> b]))
+  , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
+                [a $& b, gamma] ::=> [delta]))
+  , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
+                [a $| b, gamma] ::=> [delta]))
+  , ("L->",  ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
+                [a $> b, gamma] ::=> [delta]))
+  , ("L_|_", ([ ],
+                [botPat, gamma] ::=> [delta]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
-            [forall_x_a, gamma] ::=> [delta]))
+                   [forall_x_a, gamma] ::=> [delta]))
   , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
-            [nofree_y gamma] ::=> [nofree_y delta, nofree_y forall_x_a]))
+                   [nofree_y gamma] ::=> [nofree_y delta, nofree_y forall_x_a]))
   , ("Lexists", ([ [a_x_y, gamma] ::=> [delta] ],
-            [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y delta]))
+                   [nofree_y exists_x_a, nofree_y gamma] ::=> [nofree_y delta]))
   , ("Rexists", ([ [gamma] ::=> [delta, exists_x_a, a_x_t] ],
-            [gamma] ::=> [delta, exists_x_a]))
+                   [gamma] ::=> [delta, exists_x_a]))
   ],
   uAbbrevs = [neg],
   bAbbrevs = [iff]

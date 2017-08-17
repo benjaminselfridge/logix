@@ -38,6 +38,8 @@ getCurrentGoal env = case getGoal (subgoal env) (goal env) of
   Nothing -> error $ "current subgoal non-existent: " ++ show (subgoal env)
   Just der -> der
 
+-- TODO: Add utility to hide/show left-hand assumptions, and another utility to
+-- specifically list them
 -- TODO: make help more readable by splitting it into sections
 -- TODO: add "up" command to go up one level of the proof tree
 -- TODO: when printing out a particular rule with a NoFreePat (or several), instead
@@ -337,7 +339,7 @@ rule env arg =
             [] ->
               "  " ++ show n ++ ". " ++ name ++ " with no obligations"
             [prem] ->
-              "  " ++ show n ++ ". " ++ name ++ " with obligations: " ++
+              "  " ++ show n ++ ". " ++ name ++ " with obligation: " ++
               ppSequentInst (unicode env) (calculus env) formBinding termBinding prem
             _      ->
               "  " ++ show n ++ ". " ++ name ++ " with obligations:\n     " ++

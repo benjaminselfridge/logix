@@ -34,6 +34,7 @@ module Calculus
   -- * Pattern matching
   , match
   , matchAll
+  , mergeTermAssignments
 
   -- * Calculi functions
   , uAbbreviateForm
@@ -56,6 +57,7 @@ module Calculus
   , instAxiom
   , instRule
   , tryFormula
+  , trySequent
   , tryAxiom
   , tryRule
   , checkDerivation
@@ -69,15 +71,13 @@ import Data.Maybe
 
 --------------------------------------------------------------------------------
 -- | Represents a single term in predicate calculus.
-data Term = ConstTerm String
-          | VarTerm   String
+data Term = VarTerm   String
           | AppTerm   String [Term]
   deriving (Eq)
 
 -- TODO: remove this show instance, add it to PPCalculus.hs as a ppTerm function, and
 -- add deriving (Show) to the data decl for Term.
 instance Show Term where
-  show (ConstTerm  c) = "_" ++ c
   show (VarTerm    v) = v
   show (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map show ts) ++ ")"
 
@@ -124,7 +124,6 @@ isBinaryOp _ _ = False
 
 -- | All the variables in a term.
 termVars :: Term -> [String]
-termVars (ConstTerm  _) = []
 termVars (VarTerm    v) = [v]
 termVars (AppTerm _ ts) = [ v | t <- ts, v <- termVars t ]
 
@@ -167,6 +166,7 @@ data Sequent = [Formula] :=> [Formula]
 --------------------------------------------------------------------------------
 -- | A TermPat is a placeholder for a 'Term'.
 
+-- TODO: Add AppPat so we can do natural numbers (0).
 data TermPat = VarPat  { termPatId :: String }
              -- ^ only match variables
              | TermPat { termPatId :: String }
@@ -236,7 +236,7 @@ tryFormula :: FormulaAssignment -> TermAssignment -> FormulaPat -> ([FormulaPat]
 tryFormula formBindings termBindings (ConcPredPat p ts) =
   -- Just return a list of all the unbound terms in ts.
   ([], filter unboundTerm ts)
-  where unboundTerm t = keyElem (termPatId t) termBindings
+  where unboundTerm t = not $ keyElem (termPatId t) termBindings
 tryFormula formBindings termBindings (PredPat p) =
   case lookup p formBindings of
     Nothing -> ([PredPat p], [])
@@ -390,11 +390,13 @@ match ((QuantPat qt x pat):pats) fs =
                             , (matchForms, matchTerms) <- match pats (delete (Quant qt y f) fs)
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
-match ((ConcPredPat p ts):pats) fs =
-  [(matchForms, matchTerms) | Pred p' ts' <- nub fs
+match ((ConcPredPat p ts):pats) fs = do
+  [(matchForms, mergeTerms) | Pred p' ts' <- nub fs
                             , p == p'
                             , length ts == length ts'
-                            , (matchForms, matchTerms) <- match pats (delete (Pred p' ts') fs)]
+                            , let tBindings = zip (map termPatId ts) ts'
+                            , (matchForms, matchTerms) <- match pats (delete (Pred p' ts') fs)
+                            , mergeTerms <- mergeTermAssignments [tBindings, matchTerms]]
 match ((PredPat p):pats) fs =
   [(mergeForms, matchTerms) | Pred p' ts <- nub fs
                             , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
