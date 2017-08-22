@@ -127,7 +127,12 @@ end = Parser (\cs -> case cs of
 -- Terms
 
 term :: Parser Term
-term = varTerm <|> appTerm
+term = constTerm <|> varTerm <|> appTerm
+
+constTerm :: Parser Term
+constTerm = do n     <- digit
+               name' <- many alphaNum
+               return $ AppTerm (n:name') []
 
 varTerm :: Parser Term
 varTerm = do name <- many1 alphaNum

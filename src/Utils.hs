@@ -49,3 +49,12 @@ keyElem :: (Eq a) => a -> [(a,b)] -> Bool
 keyElem x pairs = case lookup x pairs of
   Nothing -> False
   Just _  -> True
+
+oneOfEach :: [[a]] -> [[a]]
+oneOfEach ((x:xs):rst) = [ x : l | l <- oneOfEach rst ] ++ oneOfEach (xs:rst)
+oneOfEach ([]:rst) = []
+oneOfEach [] = [[]]
+
+extractSingleton :: [a] -> Maybe a
+extractSingleton [x] = Just x
+extractSingleton _   = Nothing

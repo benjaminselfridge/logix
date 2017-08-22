@@ -34,6 +34,13 @@ import Data.List (nub, intercalate)
 
 sq = UniName ("=>","⇒")
 
+-- | Pretty print a term.
+ppTerm :: Term -> String
+ppTerm (VarTerm    v) = v
+ppTerm (AppTerm f []) = f
+ppTerm (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map ppTerm ts) ++ ")"
+
+
 -- | Pretty print a formula, with top level parentheses.
 ppFormula' :: Bool -> Calculus -> Formula -> String
 ppFormula' unicode calc f
@@ -44,7 +51,7 @@ ppFormula' unicode calc f
       " " ++ pickPair unicode (getNames $ bAbbrevOp bAbbrev) ++ " " ++
       ppFormula' unicode calc g' ++ ")"
 ppFormula' unicode calc (Pred p [])   = p
-ppFormula' unicode calc (Pred p ts)   = p ++ "(" ++ intercalate ", " (map show ts) ++ ")"
+ppFormula' unicode calc (Pred p ts)   = p ++ "(" ++ intercalate ", " (map ppTerm ts) ++ ")"
 ppFormula' unicode calc (ZeroaryOp op)    = pickPair unicode (getNames op)
 ppFormula' unicode calc (UnaryOp op a) =
   pickPair unicode (getNames op) ++ ppFormula' unicode calc a
@@ -81,6 +88,12 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
 -- TODO: g3i, top => ~exists x.P(x) -> forall x.~P(x) leads to a presentation of ~ as
 -- -> _|_.
 
+-- | Pretty print a term pattern
+ppTermPat :: TermPat -> String
+ppTermPat (AppPat f []) = f
+ppTermPat (AppPat f ts) = f ++ "(" ++ intercalate ", " (map ppTermPat ts) ++ ")"
+ppTermPat t = termPatId t
+
 -- | Pretty print a formula pattern, with top level parentheses.
 
 -- TODO: I am removing the [no free ] tag because it looks like shit, but we might
@@ -88,7 +101,7 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
 -- immediately below the rule.
 ppFormulaPat' :: Bool -> FormulaPat -> String
 ppFormulaPat' unicode (ConcPredPat p []) = p
-ppFormulaPat' unicode (ConcPredPat p ts) = p ++ "(" ++ intercalate ", " (map termPatId ts) ++ ")"
+ppFormulaPat' unicode (ConcPredPat p ts) = p ++ "(" ++ intercalate ", " (map ppTermPat ts) ++ ")"
 ppFormulaPat' unicode (PredPat p) = p
 ppFormulaPat' unicode (FormPat a) = a
 ppFormulaPat' unicode (SetPat gamma) = gamma
@@ -100,7 +113,7 @@ ppFormulaPat' unicode (BinaryOpPat op s t) =
   ppFormulaPat' unicode t ++ ")"
 ppFormulaPat' unicode (QuantPat qt x s) =
   pickPair unicode (getNames qt) ++ x ++ ".(" ++ ppFormulaPat' unicode s ++ ")"
-ppFormulaPat' unicode (SubstPat x t a) = a ++ "(" ++ termPatId t ++ "/" ++ x ++ ")"
+ppFormulaPat' unicode (SubstPat x t a) = a ++ "(" ++ ppTermPat t ++ "/" ++ x ++ ")"
 ppFormulaPat' unicode (NoFreePat x s) = ppFormulaPat' unicode s
 
 -- | Pretty print a formula pattern, omitting top level parentheses.
@@ -119,9 +132,12 @@ ppSequentPat unicode (ants ::=> sucs) =
 
 -- | Pretty print a (possibly incomplete) instantiation of a term pattern.
 ppTermInst :: TermAssignment -> TermPat -> String
+ppTermInst termBindings (AppPat f []) = f
+ppTermInst termBindings (AppPat f ts) =
+  f ++ "(" ++ intercalate ", " (map (ppTermInst termBindings) ts) ++ ")"
 ppTermInst termBindings t = case lookup (termPatId t) termBindings of
   Nothing -> "<" ++ termPatId t ++ ">"
-  Just t' -> show t'
+  Just t' -> ppTerm t'
 
 -- | Pretty print a (possibly incomplete) instantiation of a formula pattern.
 

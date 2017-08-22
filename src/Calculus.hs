@@ -32,6 +32,7 @@ module Calculus
   , BAbbrev(..)
 
   -- * Pattern matching
+  , matchTerm
   , match
   , matchAll
   , mergeTermAssignments
@@ -70,20 +71,14 @@ import Data.List
 import Data.Maybe
 
 --------------------------------------------------------------------------------
+-- Formulas and terms
+
 -- | Represents a single term in predicate calculus.
 data Term = VarTerm   String
           | AppTerm   String [Term]
-  deriving (Eq)
+  deriving (Eq, Show)
 
--- TODO: remove this show instance, add it to PPCalculus.hs as a ppTerm function, and
--- add deriving (Show) to the data decl for Term.
-instance Show Term where
-  show (VarTerm    v) = v
-  show (AppTerm f ts) = f ++ "(" ++ intercalate ", " (map show ts) ++ ")"
-
---------------------------------------------------------------------------------
 -- | Represents a single formula in predicate calculus.
-
 data Formula = Pred String [Term]
              | ZeroaryOp { formulaOp :: UniName }
              -- ^ General 0-ary connective, like bottom.
@@ -102,19 +97,24 @@ data Formula = Pred String [Term]
              -- ^ General quantified formula; forall or exists are the obvious ones.
   deriving (Eq, Show)
 
+-- | To support unicode and ASCII printing, we represent symbols as pairs (ascii,
+-- unicode) of two alternative symbol variants.
 newtype UniName = UniName { getNames :: (String, String)
                             -- ^ first is ASCII, second is Unicode
                           }
   deriving (Eq, Show)
 
+-- | Test if a formula is a particular Zeroary op.
 isZeroaryOp :: UniName -> Formula -> Bool
 isZeroaryOp op (ZeroaryOp op') = op == op'
 isZeroaryOp _ _ = False
 
+-- | Test if a formula is a particular Unary op.
 isUnaryOp :: UniName -> Formula -> Bool
 isUnaryOp op (UnaryOp op' _) = op == op'
 isUnaryOp _ _ = False
 
+-- | Test if a formula is a particular Binary op.
 isBinaryOp :: UniName -> Formula -> Bool
 isBinaryOp op (BinaryOp op' _ _) = op == op'
 isBinaryOp _ _ = False
@@ -152,6 +152,8 @@ substFormula x t (Quant    qt y f)  | x == y    = Quant qt y f
                                     | otherwise = Quant qt y (substFormula x t f)
 
 --------------------------------------------------------------------------------
+-- Sequents
+
 -- | Represents a sequent in a Gentzen-style derivation. Logically, a sequent of the
 -- form
 --
@@ -166,12 +168,19 @@ data Sequent = [Formula] :=> [Formula]
 --------------------------------------------------------------------------------
 -- | A TermPat is a placeholder for a 'Term'.
 
--- TODO: Add AppPat so we can do natural numbers (0).
 data TermPat = VarPat  { termPatId :: String }
              -- ^ only match variables
              | TermPat { termPatId :: String }
              -- ^ match any term
+             | AppPat { appPatId :: String
+                      , appTermPats :: [TermPat]
+                      }
   deriving (Eq, Show)
+
+termPatIds :: TermPat -> [String]
+termPatIds (AppPat _ termPats) = [ id | tp <- termPats
+                                      , id <- termPatIds tp]
+termPatIds tp = [termPatId tp]
 
 --------------------------------------------------------------------------------
 -- | A 'FormulaPat' is a placeholder for a 'Formula' or a list of 'Formula's. There is
@@ -184,10 +193,6 @@ data TermPat = VarPat  { termPatId :: String }
 -- container for a pattern, and generates an obligation upon instantiation that
 -- whatever the interior pattern is matched too must not contain any free occurences
 -- of a particular variable.
-
--- TODO: Add another pattern, ConcPredPat, with an explicit /list/ of
--- TermPats. Figure out how to extend all the matching and instantiation mechanisms
--- to this, and we will be able to add equality axioms to any calculus.
 
 data FormulaPat = ZeroaryOpPat UniName
                 | UnaryOpPat UniName FormulaPat
@@ -230,13 +235,19 @@ type FormulaAssignment = [(String, [Formula])]
 -- | Map from variable names to concrete terms.
 type TermAssignment = [(String, Term)]
 
+unboundTerms :: TermAssignment -> TermPat -> [TermPat]
+unboundTerms termBindings (AppPat _ ts) = concat $ map (unboundTerms termBindings) ts
+unboundTerms termBindings t =
+  case lookup (termPatId t) termBindings of
+    Nothing -> [t]
+    Just _  -> []
+
 -- | Given an assignment and a formula pattern, return a list of all the patterns in
 -- the formula that are unbound. Use this in conjunction with instFormulaPat.
 tryFormula :: FormulaAssignment -> TermAssignment -> FormulaPat -> ([FormulaPat], [TermPat])
 tryFormula formBindings termBindings (ConcPredPat p ts) =
   -- Just return a list of all the unbound terms in ts.
-  ([], filter unboundTerm ts)
-  where unboundTerm t = not $ keyElem (termPatId t) termBindings
+  ([], concat $ map (unboundTerms termBindings) ts)
 tryFormula formBindings termBindings (PredPat p) =
   case lookup p formBindings of
     Nothing -> ([PredPat p], [])
@@ -267,14 +278,18 @@ tryFormula formBindings termBindings (SubstPat x t s) = (sForms, xTerms ++ tTerm
   xTerms = case lookup x termBindings of
     Nothing -> [VarPat x]
     Just _  -> []
-  tTerms = case lookup (termPatId t) termBindings of
-    Nothing -> [t]
-    Just _  -> []
+  tTerms = unboundTerms termBindings t
 tryFormula formBindings termBindings (NoFreePat x s) = (sForms, xTerms ++ sTerms) where
   (sForms, sTerms) = tryFormula formBindings termBindings s
   xTerms = case lookup x termBindings of
     Nothing -> [VarPat x]
     Just _ -> []
+
+instTermPat :: TermAssignment -> TermPat -> Maybe Term
+instTermPat termBindings (AppPat f ts) = do
+  ts' <- sequence $ map (instTermPat termBindings) ts
+  return $ AppTerm f ts'
+instTermPat termBindings t = lookup (termPatId t) termBindings
 
 -- | Given /complete/ formula and term assignments, and a formula pattern attempt to
 -- instantiate the pattern. This function should not be invoked on incomplete
@@ -283,7 +298,7 @@ tryFormula formBindings termBindings (NoFreePat x s) = (sForms, xTerms ++ sTerms
 -- this function.
 instFormulaPat :: FormulaAssignment -> TermAssignment -> FormulaPat -> Maybe [Formula]
 instFormulaPat _ termBindings (ConcPredPat p ts) = do
-  ts' <- sequence $ map (\t -> lookup (termPatId t) termBindings) ts
+  ts' <- sequence $ map (instTermPat termBindings) ts
   return [Pred p ts']
 instFormulaPat formBindings _ (PredPat p) = lookup p formBindings
 instFormulaPat formBindings _ (FormPat a) = lookup a formBindings
@@ -303,8 +318,7 @@ instFormulaPat formBindings termBindings (QuantPat qt x s) = do
   return [Quant qt y a | a <- sB]
 instFormulaPat formBindings termBindings (SubstPat x t s) = do
   VarTerm y <- lookup x termBindings
-  let tId = termPatId t
-  tB    <- lookup tId termBindings
+  tB    <- instTermPat termBindings t
   sB    <- lookup s formBindings
   return [ substFormula y tB a | a <- sB]
 instFormulaPat formBindings termBindings (NoFreePat x s) = do
@@ -362,8 +376,15 @@ mergeTermAssignments [] = return []
 -- | Take a list of patterns and a list of formulas to match, and produce a list
 -- of all satisfying assignments.
 
--- TODO: figure out the right way to map an outer pattern over an internal set
--- pattern to do something like !Gamma.
+matchTerm :: TermPat -> Term -> [TermAssignment]
+matchTerm (VarPat  x) (VarTerm x') = [[(x, VarTerm x')]]
+matchTerm (AppPat f ts) (AppTerm f' ts')
+  | f == f', length ts == length ts'
+  = do termBindings <- sequence $ zipWith matchTerm ts ts'
+       return $ concat termBindings
+matchTerm (TermPat t) t' = [[(t,t')]]
+matchTerm _ _ = []
+
 match :: [FormulaPat] -> [Formula] -> [(FormulaAssignment,TermAssignment)]
 match (ZeroaryOpPat op:pats) fs = do
   [matchRest | ZeroaryOp op' <- nub fs
@@ -390,13 +411,13 @@ match ((QuantPat qt x pat):pats) fs =
                             , (matchForms, matchTerms) <- match pats (delete (Quant qt y f) fs)
                             , mergeForms <- mergeFormulaAssignments [fForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [[(x, VarTerm y)], fTerms, matchTerms]]
+-- TODO: This may not be quite right.
 match ((ConcPredPat p ts):pats) fs = do
   [(matchForms, mergeTerms) | Pred p' ts' <- nub fs
                             , p == p'
-                            , length ts == length ts'
-                            , let tBindings = zip (map termPatId ts) ts'
+                            , tBindings <- sequence $ zipWith matchTerm ts ts'
                             , (matchForms, matchTerms) <- match pats (delete (Pred p' ts') fs)
-                            , mergeTerms <- mergeTermAssignments [tBindings, matchTerms]]
+                            , mergeTerms <- mergeTermAssignments (matchTerms : tBindings)]
 match ((PredPat p):pats) fs =
   [(mergeForms, matchTerms) | Pred p' ts <- nub fs
                             , (matchForms, matchTerms) <- match pats (delete (Pred p' ts) fs)
@@ -420,12 +441,7 @@ match ((NoFreePat x pat):pats) fs =
                             , mergeForms <- mergeFormulaAssignments [patForms, matchForms]
                             , mergeTerms <- mergeTermAssignments [patTerms, matchTerms]]
 match [] [] = [([],[])]
-match [] _ = []
-
-oneOfEach :: [[a]] -> [[a]]
-oneOfEach ((x:xs):rst) = [ x : l | l <- oneOfEach rst ] ++ oneOfEach (xs:rst)
-oneOfEach ([]:rst) = []
-oneOfEach [] = [[]]
+match [] _  = []
 
 -- | Given a list of constraints, produce all assignments that satisfy every
 -- constraint.
@@ -488,10 +504,6 @@ data Calculus = Calculus { calcName :: String
                          , bAbbrevs :: [BAbbrev]
                          }
 
-extractSingleton :: [a] -> Maybe a
-extractSingleton [x] = Just x
-extractSingleton _   = Nothing
-
 -- | This will be used for parsing and printing abbreviations of formulas. We provide
 -- an example for abbreviating negation.
 data UAbbrev = UAbbrev { uAbbrevOp  :: UniName
@@ -553,6 +565,7 @@ formPatZeroaryOps (QuantPat _ _ f)      = formPatZeroaryOps f
 formPatZeroaryOps (NoFreePat _ f)       = []
 formPatZeroaryOps _                     = []
 
+-- | Get all the Zeroary ops used in a calculus.
 calcZeroaryOps :: Calculus -> [UniName]
 calcZeroaryOps calc = nub $ concat $ map formPatZeroaryOps (calcFormulaPats calc)
 
@@ -563,6 +576,7 @@ formPatUnaryOps (QuantPat _ _ f)      = formPatUnaryOps f
 formPatUnaryOps (NoFreePat _ f)       = formPatUnaryOps f
 formPatUnaryOps _                     = []
 
+-- | Get all the Unary ops used in a calculus.
 calcUnaryOps :: Calculus -> [UniName]
 calcUnaryOps calc = nub $ concat $ map formPatUnaryOps (calcFormulaPats calc)
 
@@ -573,6 +587,7 @@ formPatBinaryOps (QuantPat _ _ f)       = formPatBinaryOps f
 formPatBinaryOps (NoFreePat _ f)        = formPatBinaryOps f
 formPatBinaryOps _                      = []
 
+-- | Get all the Binary ops used in a calculus.
 calcBinaryOps :: Calculus -> [UniName]
 calcBinaryOps calc = nub $ concat $ map formPatBinaryOps (calcFormulaPats calc)
 
@@ -587,8 +602,9 @@ calcQts :: Calculus -> [UniName]
 calcQts calc = nub $ concat $ map formPatQts (calcFormulaPats calc)
 
 --------------------------------------------------------------------------------
--- | (Partial) derivation of a sequent
+-- Derivations
 
+-- | (Partial) derivation of a sequent
 data Derivation = Stub  { conclusion :: Sequent }
                 | Axiom { conclusion :: Sequent
                         , axiomName  :: String
