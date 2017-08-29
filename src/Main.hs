@@ -472,6 +472,6 @@ main = do
              , calculus = head calculi
              , quitFlag = False
              , pretty = True
-             , unicode = True
+             , unicode = False
              , history = ["top => P -> P", "calc " ++ calcName (head calculi)]
              }

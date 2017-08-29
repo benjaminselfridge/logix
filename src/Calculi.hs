@@ -25,13 +25,15 @@ import Calculus
 import Data.Char
 import Prelude hiding (even, odd)
 
--- To add your own calculus to logix, define it under the "Calculi definitions"
--- section, and add it to the following list:
-
 -- | All the calculi for logix. To change the default calculus upon startup, simply
 -- switch it to the front of the list.
 calculi :: [Calculus]
-calculi = [g3c, g3cp, g0c, g3ip_em, g3i, g3ip, g0i, g3ipm, g4ip, wll]
+calculi = [g3c, g3cp, g0c, g3ip_em, g3i, g3ip, g0i, g3ipm, g4ip, wll, pfll]
+
+-- Random notes
+-- 1. Do not use the SubstPat construct in the conclusion of any derivation rule; it
+--    will probably not do what you intended. Support for this is pretty tricky, but
+--    it's on my todo list.
 
 --------------------------------------------------------------------------------
 -- Calculi definitions
@@ -77,13 +79,13 @@ exists_x_a = existsPat "x" a
 nofree_y = NoFreePat "y"
 
 -- | Infix andPat.
-($&) = andPat
+(>&<) = andPat
 
 -- | Infix orPat.
-($|) = orPat
+(>|<) = orPat
 
 -- | Infix impliesPat.
-($>) = impliesPat
+(>>>) = impliesPat
 
 g3c :: Calculus
 g3c = Calculus {
@@ -91,17 +93,17 @@ g3c = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-                [gamma] ::=> [delta, a $& b]))
+                [gamma] ::=> [delta, a >&< b]))
   , ("R|",   ([ [gamma] ::=> [delta, a, b] ],
-                [gamma] ::=> [delta, a $| b]))
+                [gamma] ::=> [delta, a >|< b]))
   , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
-                [gamma] ::=> [delta, a $> b]))
+                [gamma] ::=> [delta, a >>> b]))
   , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
-                [a $& b, gamma] ::=> [delta]))
+                [a >&< b, gamma] ::=> [delta]))
   , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-                [a $| b, gamma] ::=> [delta]))
+                [a >|< b, gamma] ::=> [delta]))
   , ("L->",  ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
-                [a $> b, gamma] ::=> [delta]))
+                [a >>> b, gamma] ::=> [delta]))
   , ("L_|_", ([ ],
                 [botPat, gamma] ::=> [delta]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
@@ -123,17 +125,17 @@ g3cp = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-                [gamma] ::=> [delta, a $& b]))
+                [gamma] ::=> [delta, a >&< b]))
   , ("R|",   ([ [gamma] ::=> [delta, a, b] ],
-                [gamma] ::=> [delta, a $| b]))
+                [gamma] ::=> [delta, a >|< b]))
   , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
-                [gamma] ::=> [delta, a $> b]))
+                [gamma] ::=> [delta, a >>> b]))
   , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
-                [a $& b, gamma] ::=> [delta]))
+                [a >&< b, gamma] ::=> [delta]))
   , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-                [a $| b, gamma] ::=> [delta]))
+                [a >|< b, gamma] ::=> [delta]))
   , ("L->",  ([ [gamma] ::=> [delta, a], [b, gamma] ::=> [delta] ],
-                [a $> b, gamma] ::=> [delta]))
+                [a >>> b, gamma] ::=> [delta]))
   , ("L_|_", ([ ],
                 [botPat, gamma] ::=> [delta]))
   ],
@@ -147,19 +149,19 @@ g3i = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
-            [gamma] ::=> [a $& b]))
+            [gamma] ::=> [a >&< b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
+            [a >&< b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
-            [a $| b, gamma] ::=> [c]))
-  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
-             [a $> b, gamma] ::=> [c]))
+            [a >|< b, gamma] ::=> [c]))
+  , ("L->", ([ [a >>> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a >>> b, gamma] ::=> [c]))
   , ("L_|_", ([],
               [botPat, gamma] ::=> [c]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
@@ -181,21 +183,23 @@ g3ip = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
-            [gamma] ::=> [a $& b]))
+            [gamma] ::=> [a >&< b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
+            [a >&< b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
-            [a $| b, gamma] ::=> [c]))
-  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
-             [a $> b, gamma] ::=> [c]))
+            [a >|< b, gamma] ::=> [c]))
+  , ("L->", ([ [a >>> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a >>> b, gamma] ::=> [c]))
   , ("L_|_", ([],
               [botPat, gamma] ::=> [c]))
+  , ("Cut", ([[gamma] ::=> [d], [d, gamma'] ::=> [c]]
+            , [gamma, gamma'] ::=> [c]))
   ],
   uAbbrevs = [neg],
   bAbbrevs = [iff]
@@ -207,19 +211,19 @@ g3ip_em = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
-            [gamma] ::=> [a $& b]))
+            [gamma] ::=> [a >&< b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
+            [a >&< b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
-            [a $| b, gamma] ::=> [c]))
-  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
-             [a $> b, gamma] ::=> [c]))
+            [a >|< b, gamma] ::=> [c]))
+  , ("L->", ([ [a >>> b, gamma] ::=> [a], [b, gamma] ::=> [c] ],
+             [a >>> b, gamma] ::=> [c]))
   , ("L_|_", ([],
               [botPat, gamma] ::=> [c]))
   , ("EM", ([ [p, gamma] ::=> [c], [negPat p, gamma] ::=> [c] ],
@@ -235,19 +239,19 @@ g0c = Calculus {
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&",   ([ [gamma] ::=> [delta, a], [gamma'] ::=> [delta', b] ],
-                [gamma, gamma'] ::=> [delta, delta', a $& b]))
+                [gamma, gamma'] ::=> [delta, delta', a >&< b]))
   , ("R|",   ([ [gamma] ::=> [delta, a, b] ],
-                [gamma] ::=> [delta, a $| b]))
+                [gamma] ::=> [delta, a >|< b]))
   , ("R->",  ([ [a, gamma] ::=> [delta, b] ],
-                [gamma] ::=> [delta, a $> b]))
+                [gamma] ::=> [delta, a >>> b]))
   , ("L_|_", ([ ],
               [botPat] ::=> [c]))
   , ("L&",   ([ [a, b, gamma] ::=> [delta] ],
-                [a $& b, gamma] ::=> [delta]))
+                [a >&< b, gamma] ::=> [delta]))
   , ("L|",   ([ [a, gamma] ::=> [delta], [b, gamma'] ::=> [delta'] ],
-                [a $| b, gamma, gamma'] ::=> [delta, delta']))
+                [a >|< b, gamma, gamma'] ::=> [delta, delta']))
   , ("L->",  ([ [gamma] ::=> [delta, a], [b, gamma'] ::=> [delta'] ],
-                [a $> b, gamma, gamma'] ::=> [delta, delta']))
+                [a >>> b, gamma, gamma'] ::=> [delta, delta']))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [delta] ],
             [forall_x_a, gamma] ::=> [delta]))
   , ("Rforall", ([ [gamma] ::=> [delta, a_x_y] ],
@@ -275,19 +279,19 @@ g0i = Calculus {
   axioms = [("Axiom", [a] ::=> [a])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [delta] ::=> [b] ],
-            [gamma, delta] ::=> [a $& b]))
+            [gamma, delta] ::=> [a >&< b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
+            [a >&< b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, delta] ::=> [c] ],
-            [a $| b, gamma, delta] ::=> [c]))
+            [a >|< b, gamma, delta] ::=> [c]))
   , ("L->", ([ [gamma] ::=> [a], [b, delta] ::=> [c] ],
-             [a $> b, gamma, delta] ::=> [c]))
+             [a >>> b, gamma, delta] ::=> [c]))
   , ("L_|_", ([],
               [botPat] ::=> [c]))
   , ("Lforall", ([ [a_x_t, forall_x_a, gamma] ::=> [c] ],
@@ -313,17 +317,17 @@ g3ipm = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [delta, p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [delta, a], [gamma] ::=> [delta, b] ],
-            [gamma] ::=> [delta, a $& b]))
+            [gamma] ::=> [delta, a >&< b]))
   , ("R|", ([ [gamma] ::=> [delta, a, b] ],
-            [gamma] ::=> [delta, a $| b]))
+            [gamma] ::=> [delta, a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [delta, a $> b]))
+             [gamma] ::=> [delta, a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [delta] ],
-            [a $& b, gamma] ::=> [delta]))
+            [a >&< b, gamma] ::=> [delta]))
   , ("L|", ([ [a, gamma] ::=> [delta], [b, gamma] ::=> [delta] ],
-            [a $| b, gamma] ::=> [delta]))
-  , ("L->", ([ [a $> b, gamma] ::=> [a], [b, gamma] ::=> [delta] ],
-             [a $> b, gamma] ::=> [delta]))
+            [a >|< b, gamma] ::=> [delta]))
+  , ("L->", ([ [a >>> b, gamma] ::=> [a], [b, gamma] ::=> [delta] ],
+             [a >>> b, gamma] ::=> [delta]))
   , ("L_|_", ([],
               [botPat, gamma] ::=> [delta]))
   ],
@@ -337,25 +341,25 @@ g4ip = Calculus {
   axioms = [("Axiom", [p, gamma] ::=> [p])],
   rules =
   [ ("R&", ([ [gamma] ::=> [a], [gamma] ::=> [b] ],
-            [gamma] ::=> [a $& b]))
+            [gamma] ::=> [a >&< b]))
   , ("R|1", ([ [gamma] ::=> [a] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R|2", ([ [gamma] ::=> [b] ],
-             [gamma] ::=> [a $| b]))
+             [gamma] ::=> [a >|< b]))
   , ("R->", ([ [a, gamma] ::=> [b] ],
-             [gamma] ::=> [a $> b]))
+             [gamma] ::=> [a >>> b]))
   , ("L&", ([ [a, b, gamma] ::=> [c] ],
-            [a $& b, gamma] ::=> [c]))
+            [a >&< b, gamma] ::=> [c]))
   , ("L|", ([ [a, gamma] ::=> [c], [b, gamma] ::=> [c] ],
-            [a $| b, gamma] ::=> [c]))
+            [a >|< b, gamma] ::=> [c]))
   , ("L0->", ([ [p, b, gamma] ::=> [e] ],
-              [p, p $> b, gamma] ::=> [e]))
-  , ("L&->", ([ [c $> (d $> b), gamma] ::=> [e] ],
-              [(c $& d) $> b, gamma] ::=> [e]))
-  , ("L|->", ([ [c $> b, d $> b, gamma] ::=> [e] ],
-              [(c $| d) $> b, gamma] ::=> [e]))
-  , ("L->>", ([ [c, d $> b, gamma] ::=> [d], [b, gamma] ::=> [e] ],
-              [(c $> d) $> b, gamma] ::=> [e]))
+              [p, p >>> b, gamma] ::=> [e]))
+  , ("L&->", ([ [c >>> (d >>> b), gamma] ::=> [e] ],
+              [(c >&< d) >>> b, gamma] ::=> [e]))
+  , ("L|->", ([ [c >>> b, d >>> b, gamma] ::=> [e] ],
+              [(c >|< d) >>> b, gamma] ::=> [e]))
+  , ("L->>>", ([ [c, d >>> b, gamma] ::=> [d], [b, gamma] ::=> [e] ],
+              [(c >>> d) >>> b, gamma] ::=> [e]))
   , ("L_|_", ([],
               [botPat, gamma] ::=> [c]))
   ],
@@ -420,6 +424,59 @@ wll = Calculus
               , [gamma, intPat a] ::=> [b]))
     , ("Wk",  ([[gamma] ::=> [b]]
               , [gamma, intPat a] ::=> [b]))
+    ]
+  , uAbbrevs = []
+  , bAbbrevs = []
+  }
+
+-- From Pfenning.
+one = ZeroaryOpPat (UniName ("1", "1"))
+zero = ZeroaryOpPat (UniName ("0", "0"))
+top = ZeroaryOpPat (UniName ("T", "⊤"))
+withPat = BinaryOpPat (UniName ("&", "&"))
+
+pfll :: Calculus
+pfll = Calculus
+  { calcName = "pfll"
+  , axioms = []
+  , rules =
+    [ ("Id", ([], [a] ::=> [a]))
+    , ("xL", ([[delta, a, b] ::=> [c]]
+             , [delta, a `timesPat` b] ::=> [c]))
+    , ("xR", ([[delta] ::=> [a], [delta'] ::=> [b]]
+             , [delta, delta'] ::=> [a `timesPat` b]))
+    , ("1L", ([]
+             , [] ::=> [one]))
+    , ("1R", ([[delta] ::=> [c]]
+             , [delta, one] ::=> [c]))
+    , ("&L1", ([[delta, a] ::=> [c]]
+              , [delta, a `withPat` b] ::=> [c]))
+    , ("&L2", ([[delta, b] ::=> [c]]
+              , [delta, a `withPat` b] ::=> [c]))
+    , ("&R", ([[delta] ::=> [a], [delta] ::=> [b]]
+             , [delta] ::=> [a `withPat` b]))
+    , ("TR", ([]
+             , [delta] ::=> [top]))
+    , ("+L", ([[delta, a] ::=> [c], [delta, b] ::=> [c]]
+             , [delta, a `plusPat` b] ::=> [c]))
+    , ("+R1", ([[delta] ::=> [a]]
+              , [delta] ::=> [a `plusPat` b]))
+    , ("+R2", ([[delta] ::=> [b]]
+              , [delta] ::=> [a `plusPat` b]))
+    , ("0L", ([]
+             , [delta, zero] ::=> [c]))
+    , ("-oL", ([[delta] ::=> [a], [delta', b] ::=> [c]]
+              , [delta, delta', a `lolPat` b] ::=> [c]))
+    , ("-oR", ([[delta, a] ::=> [b]]
+              , [delta] ::=> [a `lolPat` b]))
+    , ("copy", ([[delta, intPat a, a] ::=> [c]]
+               , [delta, intPat a] ::=> [c]))
+    , ("!L", ([[gamma, intPat a] ::=> [c]]
+           , [gamma, ofCoursePat a] ::=> [c]))
+    , ("!R", ([[intPat gamma] ::=> [a]]
+             , [intPat gamma] ::=> [ofCoursePat a]))
+    , ("Cut", ([[delta] ::=> [a], [delta', a] ::=> [c]]
+              , [delta, delta'] ::=> [c]))
     ]
   , uAbbrevs = []
   , bAbbrevs = []

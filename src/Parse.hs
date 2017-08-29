@@ -200,9 +200,11 @@ uAbbrevFormula calc uAbbrev@(UAbbrev (UniName (aop, uop)) a pat) = do
     Just [f'] -> return f'
     _ -> error $ "Couldn't instantiate abbreviation " ++ show uAbbrev
 
+-- Try to read a zeroary op first, because we want to allow alphanumeric zeroary ops
+-- (like T).
 terminalFormula :: Calculus -> Parser Formula
-terminalFormula calc = predFormula <|>
-                       asum (map (\op -> zeroaryFormula op) (calcZeroaryOps calc))
+terminalFormula calc = asum (map (\op -> zeroaryFormula op) (calcZeroaryOps calc)) <|>
+                       predFormula
 
 quantFormula :: Calculus -> UniName -> Parser Formula
 quantFormula calc qt@(UniName (aqt, uqt)) = do

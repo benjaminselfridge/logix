@@ -85,8 +85,8 @@ ppSequent unicode calc (ants :=> sucs) = intercalate ", " (map (ppFormula unicod
                                          " " ++ pickPair unicode (getNames sq) ++ " " ++
                                          intercalate ", " (map (ppFormula unicode calc) sucs)
 
--- TODO: g3i, top => ~exists x.P(x) -> forall x.~P(x) leads to a presentation of ~ as
--- -> _|_.
+-- TODO: g3ip_em, => P | ~P leads to a listing of <P> -> _|_. Figure out why this is
+-- happening and how to render it as ~<P>.
 
 -- | Pretty print a term pattern
 ppTermPat :: TermPat -> String
@@ -295,8 +295,8 @@ ppCalculus unicode (Calculus name axioms rules uAbbrevs bAbbrevs) =
 
         atomString = case allAtoms of
           [] -> ""
-          [p] -> p ++ " is an atom"
-          allAtoms -> intercalate ", " allAtoms ++ " are atoms"
+          [p] -> p ++ " is an atomic formula (predicate)"
+          allAtoms -> intercalate ", " allAtoms ++ " are atomic formulas (predicates)"
 
         formulaString = case allFormulas of
           [] -> ""
@@ -325,11 +325,11 @@ ppGoalSpec gs = intercalate "." (map show gs)
 ppDerivation :: Bool -> Calculus -> Derivation -> String
 ppDerivation unicode calc = ppDerivation' unicode "" [] where
   ppDerivation' unicode pad spec (Stub conclusion) =
-    pad ++ ppSequent unicode calc conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
+    pad ++ "+ " ++ ppSequent unicode calc conclusion ++ " (unproved) [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' unicode pad spec (Axiom conclusion axiom _ _) =
-    pad ++ ppSequent unicode calc conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
+    pad ++ "+ " ++ ppSequent unicode calc conclusion ++ " (by " ++ axiom ++ ") [" ++ ppGoalSpec spec ++ "]\n"
   ppDerivation' unicode pad spec (Der conclusion rule _ _ premises) =
-    pad ++ ppSequent unicode calc conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
+    pad ++ "+ " ++ ppSequent unicode calc conclusion ++ " (by " ++ rule ++ ") [" ++ ppGoalSpec spec ++ "]\n" ++
     (concat $ ppPremises spec 1 premises)
     where ppPremises spec n [] = []
           ppPremises spec n (prem:prems) =
