@@ -9,8 +9,8 @@ Stability   : experimental
 -}
 
 module PPCalculus
-    -- * Pretty printing
-  ( ppFormula
+  ( -- * Pretty printing
+    ppFormula
   , ppFormulaList
   , ppSequent
   , ppFormulaPat

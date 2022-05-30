@@ -13,7 +13,6 @@ module Parse where
 import Calculus
 
 import Control.Applicative hiding (many)
-import Control.Applicative.Alternative hiding (many)
 import Control.Monad
 import Data.Char (isDigit, isAlpha)
 import Data.List
@@ -153,8 +152,8 @@ appTerm = do name <- many1 alphaNum
 -- TODO: finish parsing
 
 formula :: Calculus -> Parser Formula
-formula calc = asum (map (\op -> binaryOpFormula calc op) (calcBinaryOps calc)) <|>
-               asum (map (\abb -> bAbbrevFormula calc abb) (bAbbrevs calc)) <|>
+formula calc = msum (map (\op -> binaryOpFormula calc op) (calcBinaryOps calc)) <|>
+               msum (map (\abb -> bAbbrevFormula calc abb) (bAbbrevs calc)) <|>
                baseFormula calc
 
 binaryOpFormula :: Calculus -> UniName -> Parser Formula
@@ -180,9 +179,9 @@ bAbbrevFormula calc bAbbrev@(BAbbrev (UniName (aop, uop)) a b pat) = do
 baseFormula :: Calculus -> Parser Formula
 baseFormula calc = paren (formula calc) <|>
                    terminalFormula calc <|>
-                   asum (map (\op -> unaryOpFormula calc op) (calcUnaryOps calc)) <|>
-                   asum (map (\abb -> uAbbrevFormula calc abb) (uAbbrevs calc)) <|>
-                   asum (map (\qt -> quantFormula calc qt) (calcQts calc))
+                   msum (map (\op -> unaryOpFormula calc op) (calcUnaryOps calc)) <|>
+                   msum (map (\abb -> uAbbrevFormula calc abb) (uAbbrevs calc)) <|>
+                   msum (map (\qt -> quantFormula calc qt) (calcQts calc))
 
 unaryOpFormula :: Calculus -> UniName -> Parser Formula
 unaryOpFormula calc op@(UniName (aop, uop)) = do
@@ -203,7 +202,7 @@ uAbbrevFormula calc uAbbrev@(UAbbrev (UniName (aop, uop)) a pat) = do
 -- Try to read a zeroary op first, because we want to allow alphanumeric zeroary ops
 -- (like T).
 terminalFormula :: Calculus -> Parser Formula
-terminalFormula calc = asum (map (\op -> zeroaryFormula op) (calcZeroaryOps calc)) <|>
+terminalFormula calc = msum (map (\op -> zeroaryFormula op) (calcZeroaryOps calc)) <|>
                        predFormula
 
 quantFormula :: Calculus -> UniName -> Parser Formula
