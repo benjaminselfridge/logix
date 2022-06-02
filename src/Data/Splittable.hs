@@ -1,42 +1,41 @@
-module Data.Splittable where
+module Data.Splittable (Splittable(..)) where
 
-import Data.MonoTraversable(Element)
+import Data.MonoTraversable(Element, MonoPointed)
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MSet
 import qualified Data.MultiSet.Extras as MSet
 import Data.Set (Set)
 import qualified Data.Set as Set
 
--- | A container for which we can enumerate all ways to split the container in two such that we can recombine them with @<>@.
+-- | A @Splittable@ is a container for which we can enumerate all ways to split the container in two such that we can recombine them with @<>@. This can be useful for pattern matching.
 --
--- Laws:
--- 
--- @
---   1. elem (c', c'') (split c) == (c' <> c'' == c).
---   2. elem (a, c') (decapitate c) == (opoint a <> c' == c).
---   3. Neither split nor decapitate contain any repeated elements.
--- @
-class Splittable c where
+-- >>> xs = [True, False, False, True, True, True, False, False]
+-- >>> mapM_ print [ (fs, rst) | (True, xs1) <- picks xs, (fs, rst) <- splits xs1, all not fs ]
+-- ([],[False,False,True,True,True,False,False])
+-- ([False],[False,True,True,True,False,False])
+-- ([False,False],[True,True,True,False,False])
+class (Monoid c, MonoPointed c) => Splittable c where
+  -- | All ways to pick a single element the container.
+  picks :: c -> [(Element c, c)]
   -- | All ways to split the container into two pieces.
-  split :: c -> [(c, c)]
-  -- | All ways to decapitate the container.
-  decapitate :: c -> [(Element c, c)]
+  splits :: c -> [(c, c)]
 
 instance Splittable [a] where
-  split [] = [([],[])]
-  split (a:as) = ([], a:as) : [ (a:as', as'') | (as', as'') <- split as ]
+  splits [] = [([],[])]
+  splits (a:as) = ([], a:as) : [ (a:as', as'') 
+                               | (as', as'') <- splits as ]
 
-  decapitate [] = []
-  decapitate (a:as) = [(a, as)]
+  picks [] = []
+  picks (a:as) = [(a, as)]
 
 instance Ord a => Splittable (Set a) where
-  split s = [ (s', s'') | s' <- Set.toList (Set.powerSet s)
-                        , let s'' = s Set.\\ s' ]
+  splits s = [ (s', s'') | s' <- Set.toList (Set.powerSet s)
+                         , let s'' = s Set.\\ s' ]
 
-  decapitate s = [ (a, s') | a <- Set.toList s, let s' = Set.delete a s ]
+  picks s = [ (a, s') | a <- Set.toList s, let s' = Set.delete a s ]
 
 instance Ord a => Splittable (MultiSet a) where
-  split s = [ (s', s'') | s' <- MSet.powerSet s, let s'' = s MSet.\\ s']
+  splits s = [ (s', s'') | s' <- MSet.powerSet s, let s'' = s MSet.\\ s']
 
-  decapitate s = [ (a, s') | a <- MSet.distinctElems s
-                             , let s' = MSet.delete a s ]
+  picks s = [ (a, s') | a <- MSet.distinctElems s
+                      , let s' = MSet.delete a s ]

@@ -1,8 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
-module Data.MultiSet.Extras where
+module Data.MultiSet.Extras ( (<|), powerSet ) where
 
 import Data.MultiSet
-    ( MultiSet, fromOccurList, singleton, toOccurList, Occur, insert )
+  ( MultiSet, fromOccurList, singleton, toOccurList, Occur, insert )
 import Data.MonoTraversable (Element, MonoPointed(..), MonoFoldable(..))
 
 type instance Element (MultiSet a) = a
@@ -25,6 +25,7 @@ subOccurs :: [Occur] -> [[Occur]]
 subOccurs [] = [[]]
 subOccurs (n:ns) = [ i : is | i <- [0..n], is <- subOccurs ns ]
 
+-- | Infix @insert@.
 (<|) :: Ord a => a -> MultiSet a -> MultiSet a
 a <| s = insert a s
 infixr 5 <|

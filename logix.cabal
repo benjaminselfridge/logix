@@ -21,15 +21,16 @@ executable logix
                        logix,
                        brick,
                        microlens,
+                       microlens-th,
                        prettyprinter,
                        text,
+                       transformers,
                        vty
   ghc-options: -threaded
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Logix
-                       Logix.Pretty
+  exposed-modules:     Logix.Calculi
                        Logix.Types
                        Data.MultiSet.Extras
                        Data.Splittable
@@ -42,3 +43,4 @@ library
                        prettyprinter,
                        split,
                        text
+  default-extensions:  OverloadedStrings
