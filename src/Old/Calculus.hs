@@ -76,7 +76,7 @@ import Data.Maybe
 -- | Represents a single term in predicate calculus.
 data Term = VarTerm   String
           | AppTerm   String [Term]
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | Represents a single formula in predicate calculus.
 data Formula = Pred String [Term]
@@ -95,19 +95,14 @@ data Formula = Pred String [Term]
                      , formulaA  :: Formula
                      }
              -- ^ General quantified formula; forall or exists are the obvious ones.
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | To support unicode and ASCII printing, we represent symbols as pairs (ascii,
 -- unicode) of two alternative symbol variants.
 newtype UniName = UniName { getNames :: (String, String)
                             -- ^ first is ASCII, second is Unicode
                           }
-  deriving (Eq, Show)
-
--- | Test if a formula is a particular Zeroary op.
-isZeroaryOp :: UniName -> Formula -> Bool
-isZeroaryOp op (ZeroaryOp op') = op == op'
-isZeroaryOp _ _ = False
+  deriving (Eq, Ord, Show)
 
 -- | Test if a formula is a particular Unary op.
 isUnaryOp :: UniName -> Formula -> Bool
@@ -163,7 +158,7 @@ substFormula x t (Quant    qt y f)  | x == y    = Quant qt y f
 -- the f's are true, then one of the g's must be true.
 
 data Sequent = [Formula] :=> [Formula]
-  deriving (Eq, Show)
+  deriving (Eq, Ord,  Show)
 
 --------------------------------------------------------------------------------
 -- | A TermPat is a placeholder for a 'Term'.

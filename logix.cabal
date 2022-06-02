@@ -14,17 +14,31 @@ cabal-version:       >=1.10
 extra-source-files:  README.md
 
 executable logix
-  hs-source-dirs:      src
+  hs-source-dirs:      exe
   main-is:             Main.hs
-  other-modules:       Calculus, Calculi, Parse, Utils, PPCalculus
   default-language:    Haskell2010
   build-depends:       base >= 4.7,
-                       split
+                       logix,
+                       brick,
+                       microlens,
+                       prettyprinter,
+                       text,
+                       vty
+  ghc-options: -threaded
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Calculus, Calculi, Parse, Utils, PPCalculus
+  exposed-modules:     Logix
+                       Logix.Pretty
+                       Logix.Types
+                       Data.MultiSet.Extras
+                       Data.Splittable
   other-modules:
   default-language:    Haskell2010
   build-depends:       base >= 4.7,
-                       split
+                       containers,
+                       mono-traversable,
+                       multiset,
+                       prettyprinter,
+                       split,
+                       text
