@@ -14,11 +14,11 @@ import Brick
       BrickEvent (..),
       CursorLocation,
       App(..),
-      Widget,
+      Widget (..),
       hBox,
       hLimitPercent,
       padLeftRight,
-      vBox, padBottom, Padding (..), clickable, getVtyHandle, padLeft )
+      vBox, padBottom, Padding (..), clickable, getVtyHandle, padLeft, hLimit )
 import Graphics.Vty.Attributes ( defAttr )
 import Control.Monad (void, when)
 import qualified Data.Text as T
@@ -35,6 +35,8 @@ import Brick.Main (continue)
 import Lens.Micro
 import Lens.Micro.TH (makeLenses)
 import Control.Monad.IO.Class (MonadIO(..))
+import Brick.Types (Size(..))
+import Data.List (intercalate)
 
 listApplications :: ClassicalCalculus -> ClassicalSequent -> [(Int, (Text, [ClassicalSequent]))]
 listApplications calc sequent =
@@ -60,6 +62,9 @@ data LogixState = LogixState { _derivation :: Derivation
                              }
 
 makeLenses ''LogixState
+
+ppGoal :: [Int] -> Text
+ppGoal is = T.pack $ intercalate "." $ map show is
 
 changeGoal :: [Int] -> LogixState -> LogixState
 changeGoal is s =
@@ -95,8 +100,11 @@ logixApp = App
 
 logixDraw :: LogixState -> [Widget LogixResource]
 logixDraw s = 
-    [ center (hBox [ border $ hLimitPercent 50 $ center $ derivationWidget (s ^. derivation)
-                   , padLeftRight 3 $ rulesWidget s
+    [ center (hBox [ center $
+                     derivationWidget (s ^. derivation)
+                   , vBorder
+                   , hLimitPercent 30 $ center $
+                     rulesWidget s
                    ])]
 
 derivationWidget :: Derivation -> Widget LogixResource
@@ -108,12 +116,13 @@ derivationWidget (Derivation sequent mSubDers subgoalId) =
           vBox [ txt (T.pack (show (ppClassicalSequent sequent)))
                , padLeft (Pad 2) $ vBox $ derivationWidget <$> subDers
                ]
-    -- txt (T.pack (show (ppDerivation d)))
 
 rulesWidget :: LogixState -> Widget LogixResource
 rulesWidget (LogixState d calc g applications) =
     let goal = getSubgoal g d
-        header = padBottom (Pad 1) $ txt (T.pack (show g))
+        header = case g of
+            [] -> padBottom (Pad 1) $ txt "Top-level goal"
+            _ -> padBottom (Pad 1) $ txt ("Subgoal " <> ppGoal g)
     in vBox (header : (applicationWidget <$> applications))
 
 applicationWidget :: (Int, (T.Text, [ClassicalSequent])) -> Widget LogixResource
@@ -155,9 +164,14 @@ main :: IO ()
 main = do
     
     void $ defaultMain logixApp s
-    where s = LogixState (Derivation sequent Nothing []) g3c [] (listApplications g3c sequent)
-          sequent = [p .& q] |- [q .& p]
+    where s = LogixState (Derivation sequent Nothing []) calc [] (listApplications calc sequent)
+          calc = g3c
+          sequent = [] |- [(p .-> q) .-> ((p .| r) .-> (q .| r))]
           p = PredFormula "p" []
           q = PredFormula "q" []
-          x --> y = OpFormula Implies [x, y]
+          r = PredFormula "r" []
+          x .-> y = OpFormula Implies [x, y]
           x .& y = OpFormula And [x, y]
+          x .| y = OpFormula Or [x, y]
+          pnot x = OpFormula Implies [x, OpFormula Bottom []]
+

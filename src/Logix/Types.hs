@@ -4,6 +4,11 @@ module Logix.Types
       Term(..)
     , Formula(..)
     , Sequent(..)
+      -- * Variable substitution
+    , substTerm
+    , substFormula
+    , occursFreeInTerm
+    , occursFreeInFormula
       -- * Axioms, rules, derivations
     , Axiom
     , Rule
@@ -23,12 +28,41 @@ data Term f x = VarTerm x
               | FunTerm f [Term f x]
   deriving (Eq, Ord, Show)
 
+-- | Substitute variable @x@ for term @t@ in a term.
+substTerm :: Eq x => x -> Term f x -> Term f x -> Term f x
+substTerm x t (VarTerm y) | x == y = t
+                          | otherwise = VarTerm y
+substTerm x t (FunTerm f ts) = FunTerm f (substTerm x t <$> ts)
+
+-- | Determine whether variable @x@ occurs free in a term.
+occursFreeInTerm :: Eq x => x -> Term f x -> Bool
+occursFreeInTerm x (VarTerm y) | x == y = True
+                               | otherwise = False
+occursFreeInTerm x (FunTerm _ ts) = any (occursFreeInTerm x) ts
+
 -- | A formula in first-order predicate calculus. @p@ is a type for predicate symbols. @Text@ is a good choice for this. @op@ is a type for logical connectives (implies, and, or, not), including connectives that have no arguments (like bottom). @quant@ is a type for quantifiers that bind a single variable symbol. @f@ and @x@ are the function and variable symbols.
 data Formula p op quant f x 
     = PredFormula p [Term f x]
     | OpFormula op [Formula p op quant f x]
     | QuantFormula quant x (Formula p op quant f x)
     deriving (Eq, Ord, Show)
+
+-- | Substitute variable @x@ for term @t@ in a formula.
+substFormula :: Eq x => x -> Term f x -> Formula p op quant f x 
+             -> Formula p op quant f x
+substFormula x t (PredFormula p ts) = PredFormula p (substTerm x t <$> ts)
+substFormula x t (OpFormula op fs) = OpFormula op (substFormula x t <$> fs)
+substFormula x t (QuantFormula quant y fs)
+    | x == y = QuantFormula quant y fs
+    | otherwise = QuantFormula quant y (substFormula x t fs)
+
+-- | Determine whether variable @x@ occurs free in a formula.
+occursFreeInFormula :: Eq a => a -> Formula p op quant f a -> Bool
+occursFreeInFormula x (PredFormula _ ts) = any (occursFreeInTerm x) ts
+occursFreeInFormula x (OpFormula _ fs) = any (occursFreeInFormula x) fs
+occursFreeInFormula x (QuantFormula _ y f)
+    | x == y = False
+    | otherwise = occursFreeInFormula x f
 
 -- | A sequent in Gentzen-style sequent calculus. @formula@ is the type of formulas. @c@ is the type for the meta-logical container type. In Gentzen's original formulation of sequent calculus, these were ordered lists, and so Gentzen included special rules for rearranging the elements in the list. In Negri and von Plato's book Structural Proof Theory, they use unordered multisets ("bags").
 data Sequent c formula = c formula :|- c formula
